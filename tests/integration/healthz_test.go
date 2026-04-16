@@ -12,7 +12,8 @@ import (
 func TestHealthz_ReturnsOK(t *testing.T) {
 	t.Parallel()
 
-	s := httptest.NewServer(gateway.NewHandler())
+	app := gateway.NewApp()
+	s := httptest.NewServer(app.Handler)
 	t.Cleanup(s.Close)
 
 	resp, err := http.Get(s.URL + "/healthz")
@@ -33,4 +34,3 @@ func TestHealthz_ReturnsOK(t *testing.T) {
 		t.Fatalf("expected body 'ok', got %q", string(b))
 	}
 }
-

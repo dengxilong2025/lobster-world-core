@@ -22,7 +22,8 @@ func TestAuth_ChallengeProveAndWhoami(t *testing.T) {
 	}
 	pubB64 := base64.StdEncoding.EncodeToString(pub)
 
-	s := httptest.NewServer(gateway.NewHandler())
+	app := gateway.NewApp()
+	s := httptest.NewServer(app.Handler)
 	t.Cleanup(s.Close)
 
 	// 1) challenge
@@ -97,4 +98,3 @@ func postJSON(t *testing.T, url string, body any) map[string]any {
 	}
 	return out
 }
-

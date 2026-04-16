@@ -17,7 +17,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           gateway.NewHandler(),
+		Handler:           gateway.NewApp().Handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -26,4 +26,3 @@ func main() {
 		log.Fatalf("server failed: %v", err)
 	}
 }
-

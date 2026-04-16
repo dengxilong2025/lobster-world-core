@@ -1,19 +1,43 @@
 package gateway
 
 import (
+	"bufio"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"lobster-world-core/internal/auth"
+	"lobster-world-core/internal/events/spec"
+	"lobster-world-core/internal/events/store"
+	"lobster-world-core/internal/events/stream"
 )
 
+type Options struct {
+	Auth       *auth.Service
+	EventStore store.EventStore
+	Hub        *stream.Hub
+}
+
 // NewHandler returns the root HTTP handler for the service.
-//
-// v0 (P0) only exposes /healthz.
-// Later tasks will add auth, events, intents, adoptions, etc.
-func NewHandler() http.Handler {
-	a := auth.NewService(auth.Options{})
+// This is the main wiring point for HTTP endpoints.
+func NewHandler(opts Options) http.Handler {
+	a := opts.Auth
+	if a == nil {
+		a = auth.NewService(auth.Options{})
+	}
+	es := opts.EventStore
+	if es == nil {
+		es = store.NewInMemoryEventStore()
+	}
+	hub := opts.Hub
+	if hub == nil {
+		hub = stream.NewHub()
+	}
 
 	mux := http.NewServeMux()
 
@@ -87,6 +111,140 @@ func NewHandler() http.Handler {
 		})
 	})
 
+	mux.HandleFunc("GET /api/v0/events", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		worldID := q.Get("world_id")
+		sinceTs := parseInt64(q.Get("since_ts"))
+		limit := parseInt(q.Get("limit"))
+		entityID := q.Get("entity_id")
+
+		events, err := es.Query(store.Query{
+			WorldID:  worldID,
+			SinceTs:  sinceTs,
+			Limit:    limit,
+			EntityID: entityID,
+		})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     true,
+			"events": events,
+		})
+	})
+
+	// SSE event stream. Transport is decoupled from the event object.
+	mux.HandleFunc("GET /api/v0/events/stream", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		worldID := q.Get("world_id")
+		if worldID == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id is required")
+			return
+		}
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "streaming unsupported")
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		// Initial comment to establish stream.
+		_, _ = w.Write([]byte(":ok\n\n"))
+		flusher.Flush()
+
+		ch, unsub := hub.Subscribe(256)
+		defer unsub()
+
+		bw := bufio.NewWriter(w)
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case e, ok := <-ch:
+				if !ok {
+					return
+				}
+				if e.WorldID != worldID {
+					continue
+				}
+				b, _ := json.Marshal(e)
+				_, _ = bw.WriteString("event: message\n")
+				_, _ = bw.WriteString("data: ")
+				_, _ = bw.Write(b)
+				_, _ = bw.WriteString("\n\n")
+				_ = bw.Flush()
+				flusher.Flush()
+			}
+		}
+	})
+
+	// Minimal intent endpoint (v0 placeholder executor).
+	mux.HandleFunc("POST /api/v0/intents", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Goal        string   `json:"goal"`
+			Constraints []string `json:"constraints"`
+			Horizon     string   `json:"horizon"`
+			Risk        string   `json:"risk"`
+			Notes       string   `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.Goal) == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "goal is required")
+			return
+		}
+
+		intentID := "int_" + randID()
+
+		now := time.Now().Unix()
+		accepted := spec.Event{
+			SchemaVersion: 1,
+			EventID:       "evt_" + randID(),
+			Ts:            now,
+			WorldID:       "w_stone_age_1",
+			Scope:         "world",
+			Type:          "intent_accepted",
+			Actors:        []string{intentID},
+			Narrative:     fmt.Sprintf("意图接受：%s", req.Goal),
+		}
+		_ = es.Append(accepted)
+		hub.Publish(accepted)
+
+		// Placeholder executor: emit action_started/completed shortly after.
+		go func() {
+			time.Sleep(25 * time.Millisecond)
+			started := accepted
+			started.EventID = "evt_" + randID()
+			started.Ts = time.Now().Unix()
+			started.Type = "action_started"
+			started.Narrative = "行动开始：执行意图"
+			_ = es.Append(started)
+			hub.Publish(started)
+
+			time.Sleep(50 * time.Millisecond)
+			done := accepted
+			done.EventID = "evt_" + randID()
+			done.Ts = time.Now().Unix()
+			done.Type = "action_completed"
+			done.Narrative = "行动完成：意图执行完毕"
+			_ = es.Append(done)
+			hub.Publish(done)
+		}()
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":        true,
+			"intent_id": intentID,
+			"accepted":  true,
+		})
+	})
+
 	return mux
 }
 
@@ -118,4 +276,26 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 			"msg":  msg,
 		},
 	})
+}
+
+func randID() string {
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func parseInt64(v string) int64 {
+	if v == "" {
+		return 0
+	}
+	n, _ := strconv.ParseInt(v, 10, 64)
+	return n
+}
+
+func parseInt(v string) int {
+	if v == "" {
+		return 0
+	}
+	n, _ := strconv.Atoi(v)
+	return n
 }
