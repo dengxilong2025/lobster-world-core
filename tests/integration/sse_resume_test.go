@@ -57,7 +57,36 @@ func TestEvents_StreamSinceTs_ReplaysMissedEvents(t *testing.T) {
 	}
 
 	br := bufio.NewReader(resp.Body)
-	deadline := time.Now().Add(1500 * time.Millisecond)
+	// 1) The first replayed event should be evt_new (ts=20).
+	e1 := readNextDataEvent(t, br, 1500*time.Millisecond)
+	if e1.EventID != "evt_new" {
+		t.Fatalf("expected evt_new, got %s", e1.EventID)
+	}
+
+	// 2) After replay, live events should still be delivered.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		app.Hub.Publish(spec.Event{
+			SchemaVersion: 1,
+			EventID:       "evt_live",
+			Ts:            30,
+			WorldID:       "w1",
+			Scope:         "world",
+			Type:          "shock_ended",
+			Actors:        []string{"a"},
+			Narrative:     "n-live",
+		})
+	}()
+	e2 := readNextDataEvent(t, br, 1500*time.Millisecond)
+	if e2.EventID != "evt_live" {
+		t.Fatalf("expected evt_live, got %s", e2.EventID)
+	}
+}
+
+func readNextDataEvent(t *testing.T, br *bufio.Reader, timeout time.Duration) spec.Event {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		line, err := br.ReadString('\n')
 		if err != nil {
@@ -70,13 +99,9 @@ func TestEvents_StreamSinceTs_ReplaysMissedEvents(t *testing.T) {
 			if err := json.Unmarshal([]byte(payload), &e); err != nil {
 				t.Fatalf("unmarshal event: %v payload=%q", err, payload)
 			}
-			// The first replayed event should be evt_new (ts=20).
-			if e.EventID != "evt_new" {
-				t.Fatalf("expected evt_new, got %s", e.EventID)
-			}
-			return
+			return e
 		}
 	}
-	t.Fatalf("timed out waiting for replayed data")
+	t.Fatalf("timed out waiting for data line")
+	return spec.Event{}
 }
-

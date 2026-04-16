@@ -89,3 +89,42 @@ func TestProjectionHome_RanksByHotnessWeightThenRecency(t *testing.T) {
 		t.Fatalf("expected hot[0]=evt_high, got %s", home.HotEvents[0].EventID)
 	}
 }
+
+func TestProjectionEntity_RelationsAreDeterministicFromEventLog(t *testing.T) {
+	t.Parallel()
+
+	es := store.NewInMemoryEventStore()
+	_ = es.Append(spec.Event{
+		SchemaVersion: 1,
+		EventID:       "evt_1",
+		Ts:            10,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "alliance_formed",
+		Actors:        []string{"nation_a", "nation_b"},
+		Narrative:     "A与B结盟",
+	})
+	// Later betrayal should override relation to enemy.
+	_ = es.Append(spec.Event{
+		SchemaVersion: 1,
+		EventID:       "evt_2",
+		Ts:            20,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "betrayal",
+		Actors:        []string{"nation_a", "nation_b"},
+		Narrative:     "A背叛B",
+	})
+
+	p := New(Options{EventStore: es, Limit: 50})
+	page, err := p.Entity("w1", "nation_a", 10)
+	if err != nil {
+		t.Fatalf("entity: %v", err)
+	}
+	if len(page.Relations) != 1 {
+		t.Fatalf("expected 1 relation, got %d", len(page.Relations))
+	}
+	if page.Relations[0].To != "nation_b" || page.Relations[0].Type != "enemy" {
+		t.Fatalf("expected enemy relation to nation_b, got %#v", page.Relations[0])
+	}
+}

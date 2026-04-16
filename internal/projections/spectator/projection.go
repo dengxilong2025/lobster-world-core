@@ -19,66 +19,9 @@ type Projection struct {
 
 	// per world cache of recent events, sorted by (ts desc, event_id desc)
 	recent map[string][]spec.Event
+	// per world relations cache: world -> entity -> other -> relation
+	relations map[string]map[string]map[string]Relation
 	limit  int
-}
-
-func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPage, error) {
-	if eventLimit <= 0 {
-		eventLimit = 20
-	}
-	if err := p.EnsureLoaded(worldID); err != nil {
-		return EntityPage{}, err
-	}
-
-	p.mu.RLock()
-	list := append([]spec.Event{}, p.recent[worldID]...)
-	p.mu.RUnlock()
-
-	// Recent events affecting the entity:
-	recent := make([]spec.Event, 0, eventLimit)
-	for _, e := range list {
-		if e.EntityID == entityID {
-			recent = append(recent, e)
-			if len(recent) >= eventLimit {
-				break
-			}
-		}
-	}
-
-	// Relations derived from world-level events (v0 heuristic):
-	// - alliance_formed(actor0, actor1) => ally between each
-	// - betrayal(actor0, actor1) => enemy between each
-	relMap := map[string]Relation{}
-	for _, e := range list {
-		if e.Scope != "world" {
-			continue
-		}
-		if len(e.Actors) < 2 {
-			continue
-		}
-		a := e.Actors[0]
-		b := e.Actors[1]
-		if a != entityID && b != entityID {
-			continue
-		}
-		other := a
-		if a == entityID {
-			other = b
-		}
-		switch e.Type {
-		case "alliance_formed":
-			relMap[other] = Relation{To: other, Type: "ally", Strength: 1}
-		case "betrayal", "war_started":
-			relMap[other] = Relation{To: other, Type: "enemy", Strength: 1}
-		}
-	}
-	relations := make([]Relation, 0, len(relMap))
-	for _, r := range relMap {
-		relations = append(relations, r)
-	}
-	sort.Slice(relations, func(i, j int) bool { return relations[i].To < relations[j].To })
-
-	return EntityPage{Relations: relations, RecentEvents: recent}, nil
 }
 
 type Options struct {
@@ -94,6 +37,7 @@ func New(opts Options) *Projection {
 	return &Projection{
 		es:     opts.EventStore,
 		recent: map[string][]spec.Event{},
+		relations: map[string]map[string]map[string]Relation{},
 		limit:  limit,
 	}
 }
@@ -114,6 +58,9 @@ func (p *Projection) Apply(e spec.Event) {
 		list = list[:p.limit]
 	}
 	p.recent[e.WorldID] = list
+
+	// Maintain relations incrementally (high cohesion: relation logic stays inside projection).
+	p.applyRelationLocked(e)
 }
 
 // EnsureLoaded lazily loads recent events from the event store if the cache is empty.
@@ -134,6 +81,7 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 		return err
 	}
 
+	p.mu.Lock()
 	// Query returns ts asc; store in ts desc.
 	sort.Slice(events, func(i, j int) bool {
 		if events[i].Ts != events[j].Ts {
@@ -141,9 +89,14 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 		}
 		return events[i].EventID > events[j].EventID
 	})
-
-	p.mu.Lock()
 	p.recent[worldID] = events
+
+	// Build relation cache deterministically from event log (ts asc from store.Query).
+	p.relations[worldID] = map[string]map[string]Relation{}
+	raw, _ := p.es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: p.limit})
+	for _, e := range raw {
+		p.applyRelationLocked(e)
+	}
 	p.mu.Unlock()
 	return nil
 }
@@ -162,6 +115,81 @@ type Relation struct {
 	To       string
 	Type     string
 	Strength int // v0: fixed 1
+}
+
+func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPage, error) {
+	if eventLimit <= 0 {
+		eventLimit = 20
+	}
+	if err := p.EnsureLoaded(worldID); err != nil {
+		return EntityPage{}, err
+	}
+
+	p.mu.RLock()
+	list := append([]spec.Event{}, p.recent[worldID]...)
+	relWorld := p.relations[worldID]
+	p.mu.RUnlock()
+
+	// Recent events affecting the entity (entity-scoped events).
+	recent := make([]spec.Event, 0, eventLimit)
+	for _, e := range list {
+		if e.EntityID == entityID {
+			recent = append(recent, e)
+			if len(recent) >= eventLimit {
+				break
+			}
+		}
+	}
+
+	relMap := map[string]Relation{}
+	if relWorld != nil && relWorld[entityID] != nil {
+		for other, r := range relWorld[entityID] {
+			relMap[other] = r
+		}
+	}
+	relations := make([]Relation, 0, len(relMap))
+	for _, r := range relMap {
+		relations = append(relations, r)
+	}
+	sort.Slice(relations, func(i, j int) bool { return relations[i].To < relations[j].To })
+
+	return EntityPage{Relations: relations, RecentEvents: recent}, nil
+}
+
+func (p *Projection) applyRelationLocked(e spec.Event) {
+	if e.WorldID == "" {
+		return
+	}
+	if e.Scope != "world" {
+		return
+	}
+	if len(e.Actors) < 2 {
+		return
+	}
+	a := e.Actors[0]
+	b := e.Actors[1]
+
+	relType := ""
+	switch e.Type {
+	case "alliance_formed", "trade_agreement", "treaty_signed":
+		relType = "ally"
+	case "betrayal", "war_started", "battle_resolved":
+		relType = "enemy"
+	default:
+		return
+	}
+
+	if p.relations[e.WorldID] == nil {
+		p.relations[e.WorldID] = map[string]map[string]Relation{}
+	}
+	if p.relations[e.WorldID][a] == nil {
+		p.relations[e.WorldID][a] = map[string]Relation{}
+	}
+	if p.relations[e.WorldID][b] == nil {
+		p.relations[e.WorldID][b] = map[string]Relation{}
+	}
+	p.relations[e.WorldID][a][b] = Relation{To: b, Type: relType, Strength: 1}
+	p.relations[e.WorldID][b][a] = Relation{To: a, Type: relType, Strength: 1}
 }
 
 // Home returns the spectator home model derived from recent events.

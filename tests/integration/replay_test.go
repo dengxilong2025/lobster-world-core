@@ -23,6 +23,10 @@ func TestReplayHighlight_ReturnsBeats(t *testing.T) {
 		Type:          "betrayal",
 		Actors:        []string{"a"},
 		Narrative:     "盟友反咬：背叛写进史册",
+		Trace: []spec.TraceLink{
+			{CauseEventID: "evt_prev", Note: "裂冬预兆导致粮荒"},
+			{CauseEventID: "evt_mid", Note: "盟誓条款争议扩大"},
+		},
 	})
 
 	s := httptest.NewServer(app.Handler)
@@ -54,5 +58,9 @@ func TestReplayHighlight_ReturnsBeats(t *testing.T) {
 	first, _ := beats[0].(map[string]any)
 	if first["caption"] != "盟友反咬：背叛写进史册" {
 		t.Fatalf("expected first beat caption to match narrative, got %#v", first)
+	}
+	second, _ := beats[1].(map[string]any)
+	if second["caption"] != "因为：裂冬预兆导致粮荒" {
+		t.Fatalf("expected second beat caption from trace, got %#v", second)
 	}
 }

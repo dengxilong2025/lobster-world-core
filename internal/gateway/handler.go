@@ -502,11 +502,18 @@ func NewHandler(opts Options) http.Handler {
 
 		beat1 := target.Narrative
 		beat2 := "因果链：暂无（v0），后续由 trace 自动生成"
-		if prev != nil {
+		beat3 := "余波：关系网将发生重排"
+
+		// Prefer trace-based narration (butterfly effect explanation).
+		if len(target.Trace) > 0 && strings.TrimSpace(target.Trace[0].Note) != "" {
+			beat2 = "因为：" + target.Trace[0].Note
+		} else if prev != nil {
 			beat2 = "铺垫：" + prev.Narrative
 		}
-		beat3 := "余波：关系网将发生重排"
-		if next != nil {
+
+		if len(target.Trace) > 1 && strings.TrimSpace(target.Trace[1].Note) != "" {
+			beat3 = "进展：" + target.Trace[1].Note
+		} else if next != nil {
 			beat3 = "余波：" + next.Narrative
 		}
 		beat4 := "下一步：关注冲击/背叛/迁徙窗口"
