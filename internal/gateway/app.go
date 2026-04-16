@@ -3,6 +3,7 @@ package gateway
 import (
 	"net/http"
 
+	"lobster-world-core/internal/adoption"
 	"lobster-world-core/internal/auth"
 	"lobster-world-core/internal/events/store"
 	"lobster-world-core/internal/events/stream"
@@ -15,6 +16,7 @@ type App struct {
 	Auth       *auth.Service
 	EventStore store.EventStore
 	Hub        *stream.Hub
+	Adoption   *adoption.Service
 }
 
 // NewApp constructs the v0 application with in-memory implementations.
@@ -23,12 +25,13 @@ func NewApp() *App {
 		Auth:       auth.NewService(auth.Options{}),
 		EventStore: store.NewInMemoryEventStore(),
 		Hub:        stream.NewHub(),
+		Adoption:   adoption.NewService(adoption.Options{}),
 	}
 	a.Handler = NewHandler(Options{
 		Auth:       a.Auth,
 		EventStore: a.EventStore,
 		Hub:        a.Hub,
+		Adoption:   a.Adoption,
 	})
 	return a
 }
-
