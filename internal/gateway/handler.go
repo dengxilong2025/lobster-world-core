@@ -371,6 +371,54 @@ func NewHandler(opts Options) http.Handler {
 		})
 	})
 
+	// Spectator home (v0). This is a projection view built from the event log.
+	mux.HandleFunc("GET /api/v0/spectator/home", func(w http.ResponseWriter, r *http.Request) {
+		worldID := r.URL.Query().Get("world_id")
+		if worldID == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id is required")
+			return
+		}
+		events, err := es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: 50})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		// Use the last event as headline; hot list is the latest N.
+		var headline map[string]any
+		if len(events) > 0 {
+			last := events[len(events)-1]
+			headline = map[string]any{
+				"event_id":   last.EventID,
+				"type":       last.Type,
+				"title":      last.Narrative,
+				"narrative":  last.Narrative,
+				"replay_id":  "rp_" + last.EventID,
+				"time_ago_sec": 0,
+			}
+		} else {
+			headline = map[string]any{}
+		}
+
+		hot := make([]map[string]any, 0, len(events))
+		for i := len(events) - 1; i >= 0 && len(hot) < 10; i-- {
+			e := events[i]
+			hot = append(hot, map[string]any{
+				"event_id":  e.EventID,
+				"type":      e.Type,
+				"title":     e.Narrative,
+				"narrative": e.Narrative,
+				"replay_id": "rp_" + e.EventID,
+			})
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":        true,
+			"world_id":  worldID,
+			"headline":  headline,
+			"hot_events": hot,
+		})
+	})
+
 	return mux
 }
 
