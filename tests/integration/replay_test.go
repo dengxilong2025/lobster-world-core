@@ -52,7 +52,7 @@ func TestReplayHighlight_ReturnsBeats(t *testing.T) {
 		t.Fatalf("expected replay_id, got %#v", out)
 	}
 	beats, ok := out["beats"].([]any)
-	if !ok || len(beats) == 0 {
+	if !ok || len(beats) < 4 {
 		t.Fatalf("expected non-empty beats, got %#v", out["beats"])
 	}
 	first, _ := beats[0].(map[string]any)
@@ -62,5 +62,9 @@ func TestReplayHighlight_ReturnsBeats(t *testing.T) {
 	second, _ := beats[1].(map[string]any)
 	if second["caption"] != "因为：裂冬预兆导致粮荒" {
 		t.Fatalf("expected second beat caption from trace, got %#v", second)
+	}
+	third, _ := beats[2].(map[string]any)
+	if third["caption"] != "进展：盟誓条款争议扩大" {
+		t.Fatalf("expected third beat caption from trace, got %#v", third)
 	}
 }

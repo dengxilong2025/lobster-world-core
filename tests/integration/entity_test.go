@@ -26,6 +26,16 @@ func TestSpectatorEntity_ReturnsRelationsAndRecentEvents(t *testing.T) {
 	})
 	_ = app.EventStore.Append(spec.Event{
 		SchemaVersion: 1,
+		EventID:       "evt_warn_1",
+		Ts:            15,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "shock_warning",
+		Actors:        []string{"world"},
+		Narrative:     "天象异常：裂冬指数上升",
+	})
+	_ = app.EventStore.Append(spec.Event{
+		SchemaVersion: 1,
 		EventID:       "evt_ent_1",
 		Ts:            20,
 		WorldID:       "w1",
@@ -64,5 +74,13 @@ func TestSpectatorEntity_ReturnsRelationsAndRecentEvents(t *testing.T) {
 	if !ok || len(events) == 0 {
 		t.Fatalf("expected recent_events, got %#v", out["recent_events"])
 	}
-}
 
+	why, ok := out["why_strong"].([]any)
+	if !ok || len(why) == 0 {
+		t.Fatalf("expected why_strong, got %#v", out["why_strong"])
+	}
+	risk, ok := out["next_risk"].([]any)
+	if !ok || len(risk) == 0 {
+		t.Fatalf("expected next_risk, got %#v", out["next_risk"])
+	}
+}

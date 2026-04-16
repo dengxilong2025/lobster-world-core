@@ -109,6 +109,8 @@ type Home struct {
 type EntityPage struct {
 	Relations   []Relation
 	RecentEvents []spec.Event
+	WhyStrong   []string
+	NextRisk    []string
 }
 
 type Relation struct {
@@ -141,6 +143,20 @@ func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPag
 		}
 	}
 
+	// Why strong: derive short explanations from recent entity events + allies.
+	whyStrong := make([]string, 0, 3)
+	for _, e := range recent {
+		switch e.Type {
+		case "skill_gained":
+			whyStrong = append(whyStrong, "关键技能："+e.Narrative)
+		case "milestone_reached":
+			whyStrong = append(whyStrong, "里程碑："+e.Narrative)
+		}
+		if len(whyStrong) >= 3 {
+			break
+		}
+	}
+
 	relMap := map[string]Relation{}
 	if relWorld != nil && relWorld[entityID] != nil {
 		for other, r := range relWorld[entityID] {
@@ -153,7 +169,41 @@ func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPag
 	}
 	sort.Slice(relations, func(i, j int) bool { return relations[i].To < relations[j].To })
 
-	return EntityPage{Relations: relations, RecentEvents: recent}, nil
+	// If no "why strong" from events, fall back to ally relation as explanation.
+	if len(whyStrong) == 0 {
+		for _, r := range relations {
+			if r.Type == "ally" {
+				whyStrong = append(whyStrong, "盟友支持："+r.To)
+				break
+			}
+		}
+	}
+
+	// Next risks: derived from world shock + nearby conflict with this entity.
+	nextRisk := make([]string, 0, 3)
+	for _, e := range list {
+		// world-level shocks affect everyone
+		if e.Scope == "world" && (e.Type == "shock_warning" || e.Type == "shock_started") {
+			nextRisk = append(nextRisk, "冲击风险："+e.Narrative)
+			break
+		}
+	}
+	for _, e := range list {
+		if e.Scope != "world" || len(e.Actors) < 2 {
+			continue
+		}
+		a := e.Actors[0]
+		b := e.Actors[1]
+		if a != entityID && b != entityID {
+			continue
+		}
+		if e.Type == "betrayal" || e.Type == "war_started" || e.Type == "battle_resolved" {
+			nextRisk = append(nextRisk, "冲突升级："+e.Narrative)
+			break
+		}
+	}
+
+	return EntityPage{Relations: relations, RecentEvents: recent, WhyStrong: whyStrong, NextRisk: nextRisk}, nil
 }
 
 func (p *Projection) applyRelationLocked(e spec.Event) {

@@ -457,6 +457,8 @@ func NewHandler(opts Options) http.Handler {
 			"entity_id":    entityID,
 			"relations":    page.Relations,
 			"recent_events": page.RecentEvents,
+			"why_strong":   page.WhyStrong,
+			"next_risk":    page.NextRisk,
 		})
 	})
 
@@ -501,29 +503,60 @@ func NewHandler(opts Options) http.Handler {
 		}
 
 		beat1 := target.Narrative
-		beat2 := "因果链：暂无（v0），后续由 trace 自动生成"
-		beat3 := "余波：关系网将发生重排"
+		// Build documentary-like beats from trace, with graceful fallback to neighbor events.
+		// Target: 3~6 beats in total (including opener and ending).
+		type step struct {
+			prefix  string
+			fallback string
+			note    string
+		}
+		steps := []step{}
 
 		// Prefer trace-based narration (butterfly effect explanation).
-		if len(target.Trace) > 0 && strings.TrimSpace(target.Trace[0].Note) != "" {
-			beat2 = "因为：" + target.Trace[0].Note
-		} else if prev != nil {
-			beat2 = "铺垫：" + prev.Narrative
+		for i, tl := range target.Trace {
+			if strings.TrimSpace(tl.Note) == "" {
+				continue
+			}
+			prefix := "进展："
+			if i == 0 {
+				prefix = "因为："
+			} else if i == 1 {
+				prefix = "进展："
+			} else {
+				prefix = "转折："
+			}
+			steps = append(steps, step{prefix: prefix, note: tl.Note})
+			if len(steps) >= 4 {
+				break
+			}
+		}
+		if len(steps) == 0 && prev != nil {
+			steps = append(steps, step{prefix: "铺垫：", note: prev.Narrative})
+		}
+		if len(steps) == 1 && next != nil {
+			steps = append(steps, step{prefix: "余波：", note: next.Narrative})
 		}
 
-		if len(target.Trace) > 1 && strings.TrimSpace(target.Trace[1].Note) != "" {
-			beat3 = "进展：" + target.Trace[1].Note
-		} else if next != nil {
-			beat3 = "余波：" + next.Narrative
-		}
-		beat4 := "下一步：关注冲击/背叛/迁徙窗口"
+		beats := make([]map[string]any, 0, 6)
+		beats = append(beats, map[string]any{"t": 0, "caption": beat1})
 
-		beats := []map[string]any{
-			{"t": 0, "caption": beat1},
-			{"t": 8, "caption": beat2},
-			{"t": 16, "caption": beat3},
-			{"t": 24, "caption": beat4},
+		// Spread steps across the middle timeline.
+		baseT := 8
+		stepGap := 8
+		if len(steps) >= 3 {
+			stepGap = 6
 		}
+		for i, st := range steps {
+			beats = append(beats, map[string]any{
+				"t":       baseT + i*stepGap,
+				"caption": st.prefix + st.note,
+			})
+		}
+
+		beats = append(beats, map[string]any{
+			"t":       24,
+			"caption": "下一步：关注冲击/背叛/迁徙窗口",
+		})
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":        true,
