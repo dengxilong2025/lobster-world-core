@@ -16,6 +16,7 @@ import (
 	"lobster-world-core/internal/events/spec"
 	"lobster-world-core/internal/events/store"
 	"lobster-world-core/internal/events/stream"
+	"lobster-world-core/internal/projections/spectator"
 )
 
 type Options struct {
@@ -23,6 +24,7 @@ type Options struct {
 	EventStore store.EventStore
 	Hub        *stream.Hub
 	Adoption   *adoption.Service
+	Spectator  *spectator.Projection
 }
 
 // NewHandler returns the root HTTP handler for the service.
@@ -43,6 +45,10 @@ func NewHandler(opts Options) http.Handler {
 	ad := opts.Adoption
 	if ad == nil {
 		ad = adoption.NewService(adoption.Options{})
+	}
+	sp := opts.Spectator
+	if sp == nil {
+		sp = spectator.New(spectator.Options{EventStore: es})
 	}
 
 	mux := http.NewServeMux()
@@ -396,30 +402,25 @@ func NewHandler(opts Options) http.Handler {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id is required")
 			return
 		}
-		events, err := es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: 50})
+		home, err := sp.Home(worldID, 10)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
 		}
-		// Use the last event as headline; hot list is the latest N.
-		var headline map[string]any
-		if len(events) > 0 {
-			last := events[len(events)-1]
+
+		headline := map[string]any{}
+		if home.Headline != nil {
 			headline = map[string]any{
-				"event_id":   last.EventID,
-				"type":       last.Type,
-				"title":      last.Narrative,
-				"narrative":  last.Narrative,
-				"replay_id":  "rp_" + last.EventID,
-				"time_ago_sec": 0,
+				"event_id":   home.Headline.EventID,
+				"type":       home.Headline.Type,
+				"title":      home.Headline.Narrative,
+				"narrative":  home.Headline.Narrative,
+				"replay_id":  "rp_" + home.Headline.EventID,
 			}
-		} else {
-			headline = map[string]any{}
 		}
 
-		hot := make([]map[string]any, 0, len(events))
-		for i := len(events) - 1; i >= 0 && len(hot) < 10; i-- {
-			e := events[i]
+		hot := make([]map[string]any, 0, len(home.HotEvents))
+		for _, e := range home.HotEvents {
 			hot = append(hot, map[string]any{
 				"event_id":  e.EventID,
 				"type":      e.Type,

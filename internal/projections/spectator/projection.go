@@ -1,0 +1,121 @@
+package spectator
+
+import (
+	"sort"
+	"sync"
+
+	"lobster-world-core/internal/events/spec"
+	"lobster-world-core/internal/events/store"
+)
+
+// Projection maintains a minimal spectator read model derived from the event log.
+//
+// v0 goal: provide "headline + hot_events" fast and deterministically.
+// It is designed to be rebuilt from the EventStore (read models are disposable).
+type Projection struct {
+	mu sync.RWMutex
+
+	es store.EventStore
+
+	// per world cache of recent events, sorted by (ts desc, event_id desc)
+	recent map[string][]spec.Event
+	limit  int
+}
+
+type Options struct {
+	EventStore store.EventStore
+	Limit     int
+}
+
+func New(opts Options) *Projection {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	return &Projection{
+		es:     opts.EventStore,
+		recent: map[string][]spec.Event{},
+		limit:  limit,
+	}
+}
+
+// Apply ingests a new event into the read model (best-effort).
+func (p *Projection) Apply(e spec.Event) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	list := append(p.recent[e.WorldID], e)
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Ts != list[j].Ts {
+			return list[i].Ts > list[j].Ts
+		}
+		return list[i].EventID > list[j].EventID
+	})
+	if len(list) > p.limit {
+		list = list[:p.limit]
+	}
+	p.recent[e.WorldID] = list
+}
+
+// EnsureLoaded lazily loads recent events from the event store if the cache is empty.
+// This supports process restarts and avoids relying solely on live event delivery.
+func (p *Projection) EnsureLoaded(worldID string) error {
+	p.mu.RLock()
+	_, ok := p.recent[worldID]
+	p.mu.RUnlock()
+	if ok {
+		return nil
+	}
+	if p.es == nil {
+		return nil
+	}
+
+	events, err := p.es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: p.limit})
+	if err != nil {
+		return err
+	}
+
+	// Query returns ts asc; store in ts desc.
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].Ts != events[j].Ts {
+			return events[i].Ts > events[j].Ts
+		}
+		return events[i].EventID > events[j].EventID
+	})
+
+	p.mu.Lock()
+	p.recent[worldID] = events
+	p.mu.Unlock()
+	return nil
+}
+
+type Home struct {
+	Headline  *spec.Event
+	HotEvents []spec.Event
+}
+
+// Home returns the spectator home model derived from recent events.
+func (p *Projection) Home(worldID string, hotLimit int) (Home, error) {
+	if hotLimit <= 0 {
+		hotLimit = 10
+	}
+	if err := p.EnsureLoaded(worldID); err != nil {
+		return Home{}, err
+	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	list := p.recent[worldID]
+	if len(list) == 0 {
+		return Home{Headline: nil, HotEvents: []spec.Event{}}, nil
+	}
+	hl := &list[0]
+
+	n := hotLimit
+	if len(list) < n {
+		n = len(list)
+	}
+	return Home{Headline: hl, HotEvents: append([]spec.Event{}, list[:n]...)}, nil
+}
+

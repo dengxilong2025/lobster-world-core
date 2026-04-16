@@ -7,6 +7,7 @@ import (
 	"lobster-world-core/internal/auth"
 	"lobster-world-core/internal/events/store"
 	"lobster-world-core/internal/events/stream"
+	"lobster-world-core/internal/projections/spectator"
 )
 
 // App bundles server dependencies so tests and main can share the same wiring.
@@ -17,6 +18,7 @@ type App struct {
 	EventStore store.EventStore
 	Hub        *stream.Hub
 	Adoption   *adoption.Service
+	Spectator  *spectator.Projection
 }
 
 // NewApp constructs the v0 application with in-memory implementations.
@@ -27,11 +29,13 @@ func NewApp() *App {
 		Hub:        stream.NewHub(),
 		Adoption:   adoption.NewService(adoption.Options{}),
 	}
+	a.Spectator = spectator.New(spectator.Options{EventStore: a.EventStore})
 	a.Handler = NewHandler(Options{
 		Auth:       a.Auth,
 		EventStore: a.EventStore,
 		Hub:        a.Hub,
 		Adoption:   a.Adoption,
+		Spectator:  a.Spectator,
 	})
 	return a
 }
