@@ -16,7 +16,19 @@ type Event struct {
 	Actors        []string `json:"actors"`
 	Narrative     string   `json:"narrative"`
 
-	// Optional fields for v0 will be added later (tick/entity_id/delta/trace/meta).
+	// Optional fields (v0+): these do NOT affect validation.
+	EntityID string         `json:"entity_id,omitempty"`
+	Tick     int64          `json:"tick,omitempty"`
+	Delta    map[string]any `json:"delta,omitempty"`
+	Trace    []TraceLink    `json:"trace,omitempty"`
+	Meta     map[string]any `json:"meta,omitempty"`
+}
+
+// TraceLink records a human-readable causal link to another event.
+// It supports "butterfly effect" explanations and replay narration.
+type TraceLink struct {
+	CauseEventID string `json:"cause_event_id"`
+	Note         string `json:"note"`
 }
 
 // Validate checks minimal v0 invariants (MUST fields). v0 keeps this intentionally small.

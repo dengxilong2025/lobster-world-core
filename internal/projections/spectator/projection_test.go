@@ -45,3 +45,47 @@ func TestProjectionHome_UsesNewestAsHeadline(t *testing.T) {
 	}
 }
 
+func TestProjectionHome_RanksByHotnessWeightThenRecency(t *testing.T) {
+	t.Parallel()
+
+	es := store.NewInMemoryEventStore()
+
+	// Newer but low weight.
+	_ = es.Append(spec.Event{
+		SchemaVersion: 1,
+		EventID:       "evt_low",
+		Ts:            100,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "intent_accepted",
+		Actors:        []string{"x"},
+		Narrative:     "low",
+	})
+	// Slightly older but high weight.
+	_ = es.Append(spec.Event{
+		SchemaVersion: 1,
+		EventID:       "evt_high",
+		Ts:            90,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "betrayal",
+		Actors:        []string{"x"},
+		Narrative:     "high",
+	})
+
+	p := New(Options{EventStore: es, Limit: 50})
+	home, err := p.Home("w1", 2)
+	if err != nil {
+		t.Fatalf("home: %v", err)
+	}
+
+	if home.Headline == nil || home.Headline.EventID != "evt_low" {
+		t.Fatalf("expected headline newest evt_low, got %#v", home.Headline)
+	}
+	if len(home.HotEvents) != 2 {
+		t.Fatalf("expected 2 hot events, got %d", len(home.HotEvents))
+	}
+	if home.HotEvents[0].EventID != "evt_high" {
+		t.Fatalf("expected hot[0]=evt_high, got %s", home.HotEvents[0].EventID)
+	}
+}

@@ -464,11 +464,36 @@ func NewHandler(opts Options) http.Handler {
 			return
 		}
 
+		// Find neighbor events to give replay context (MVP narration).
+		var prev, next *spec.Event
+		for i := range events {
+			if events[i].EventID == eventID {
+				if i > 0 {
+					prev = &events[i-1]
+				}
+				if i+1 < len(events) {
+					next = &events[i+1]
+				}
+				break
+			}
+		}
+
+		beat1 := target.Narrative
+		beat2 := "因果链：暂无（v0），后续由 trace 自动生成"
+		if prev != nil {
+			beat2 = "铺垫：" + prev.Narrative
+		}
+		beat3 := "余波：关系网将发生重排"
+		if next != nil {
+			beat3 = "余波：" + next.Narrative
+		}
+		beat4 := "下一步：关注冲击/背叛/迁徙窗口"
+
 		beats := []map[string]any{
-			{"t": 0, "caption": target.Narrative},
-			{"t": 8, "caption": "因果链：请见事件 trace（后续增强）"},
-			{"t": 16, "caption": "关系网变化：请见观战页（后续增强）"},
-			{"t": 24, "caption": "下一步风险：冲击/背叛/迁徙窗口（后续增强）"},
+			{"t": 0, "caption": beat1},
+			{"t": 8, "caption": beat2},
+			{"t": 16, "caption": beat3},
+			{"t": 24, "caption": beat4},
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{

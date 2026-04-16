@@ -112,10 +112,34 @@ func (p *Projection) Home(worldID string, hotLimit int) (Home, error) {
 	}
 	hl := &list[0]
 
-	n := hotLimit
-	if len(list) < n {
-		n = len(list)
+	// Compute hotness based on type weight + recency decay.
+	now := hl.Ts
+	type scored struct {
+		e     spec.Event
+		score int64
 	}
-	return Home{Headline: hl, HotEvents: append([]spec.Event{}, list[:n]...)}, nil
-}
+	scoredList := make([]scored, 0, len(list))
+	for _, e := range list {
+		age := now - e.Ts
+		scoredList = append(scoredList, scored{e: e, score: scoreEvent(e.Type, age)})
+	}
+	sort.Slice(scoredList, func(i, j int) bool {
+		if scoredList[i].score != scoredList[j].score {
+			return scoredList[i].score > scoredList[j].score
+		}
+		if scoredList[i].e.Ts != scoredList[j].e.Ts {
+			return scoredList[i].e.Ts > scoredList[j].e.Ts
+		}
+		return scoredList[i].e.EventID > scoredList[j].e.EventID
+	})
 
+	n := hotLimit
+	if len(scoredList) < n {
+		n = len(scoredList)
+	}
+	out := make([]spec.Event, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, scoredList[i].e)
+	}
+	return Home{Headline: hl, HotEvents: out}, nil
+}

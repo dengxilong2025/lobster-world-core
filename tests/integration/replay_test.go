@@ -51,5 +51,8 @@ func TestReplayHighlight_ReturnsBeats(t *testing.T) {
 	if !ok || len(beats) == 0 {
 		t.Fatalf("expected non-empty beats, got %#v", out["beats"])
 	}
+	first, _ := beats[0].(map[string]any)
+	if first["caption"] != "盟友反咬：背叛写进史册" {
+		t.Fatalf("expected first beat caption to match narrative, got %#v", first)
+	}
 }
-
