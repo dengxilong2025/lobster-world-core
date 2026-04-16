@@ -148,6 +148,7 @@ func NewHandler(opts Options) http.Handler {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id is required")
 			return
 		}
+		sinceTs := parseInt64(q.Get("since_ts"))
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -167,6 +168,23 @@ func NewHandler(opts Options) http.Handler {
 		defer unsub()
 
 		bw := bufio.NewWriter(w)
+
+		// Replay missed events first (best-effort). This is critical because hub may drop under backpressure.
+		if sinceTs > 0 {
+			missed, err := es.Query(store.Query{WorldID: worldID, SinceTs: sinceTs, Limit: 500})
+			if err == nil {
+				for _, e := range missed {
+					b, _ := json.Marshal(e)
+					_, _ = bw.WriteString("event: message\n")
+					_, _ = bw.WriteString("data: ")
+					_, _ = bw.Write(b)
+					_, _ = bw.WriteString("\n\n")
+				}
+				_ = bw.Flush()
+				flusher.Flush()
+			}
+		}
+
 		for {
 			select {
 			case <-r.Context().Done():
@@ -416,6 +434,48 @@ func NewHandler(opts Options) http.Handler {
 			"world_id":  worldID,
 			"headline":  headline,
 			"hot_events": hot,
+		})
+	})
+
+	// Replay highlight (MVP): return a structured "script replay" for 30s.
+	mux.HandleFunc("GET /api/v0/replay/highlight", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		worldID := q.Get("world_id")
+		eventID := q.Get("event_id")
+		if worldID == "" || eventID == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id and event_id are required")
+			return
+		}
+		events, err := es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: 1000})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		var target *spec.Event
+		for i := range events {
+			if events[i].EventID == eventID {
+				target = &events[i]
+				break
+			}
+		}
+		if target == nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "event not found")
+			return
+		}
+
+		beats := []map[string]any{
+			{"t": 0, "caption": target.Narrative},
+			{"t": 8, "caption": "因果链：请见事件 trace（后续增强）"},
+			{"t": 16, "caption": "关系网变化：请见观战页（后续增强）"},
+			{"t": 24, "caption": "下一步风险：冲击/背叛/迁徙窗口（后续增强）"},
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":        true,
+			"replay_id": "rp_" + target.EventID,
+			"event_id":  target.EventID,
+			"duration_sec": 30,
+			"beats":     beats,
 		})
 	})
 
