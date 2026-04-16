@@ -438,6 +438,28 @@ func NewHandler(opts Options) http.Handler {
 		})
 	})
 
+	mux.HandleFunc("GET /api/v0/spectator/entity", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		worldID := q.Get("world_id")
+		entityID := q.Get("entity_id")
+		if worldID == "" || entityID == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id and entity_id are required")
+			return
+		}
+		page, err := sp.Entity(worldID, entityID, 20)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":           true,
+			"world_id":     worldID,
+			"entity_id":    entityID,
+			"relations":    page.Relations,
+			"recent_events": page.RecentEvents,
+		})
+	})
+
 	// Replay highlight (MVP): return a structured "script replay" for 30s.
 	mux.HandleFunc("GET /api/v0/replay/highlight", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

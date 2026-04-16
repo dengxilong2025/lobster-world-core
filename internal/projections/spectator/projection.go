@@ -22,6 +22,65 @@ type Projection struct {
 	limit  int
 }
 
+func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPage, error) {
+	if eventLimit <= 0 {
+		eventLimit = 20
+	}
+	if err := p.EnsureLoaded(worldID); err != nil {
+		return EntityPage{}, err
+	}
+
+	p.mu.RLock()
+	list := append([]spec.Event{}, p.recent[worldID]...)
+	p.mu.RUnlock()
+
+	// Recent events affecting the entity:
+	recent := make([]spec.Event, 0, eventLimit)
+	for _, e := range list {
+		if e.EntityID == entityID {
+			recent = append(recent, e)
+			if len(recent) >= eventLimit {
+				break
+			}
+		}
+	}
+
+	// Relations derived from world-level events (v0 heuristic):
+	// - alliance_formed(actor0, actor1) => ally between each
+	// - betrayal(actor0, actor1) => enemy between each
+	relMap := map[string]Relation{}
+	for _, e := range list {
+		if e.Scope != "world" {
+			continue
+		}
+		if len(e.Actors) < 2 {
+			continue
+		}
+		a := e.Actors[0]
+		b := e.Actors[1]
+		if a != entityID && b != entityID {
+			continue
+		}
+		other := a
+		if a == entityID {
+			other = b
+		}
+		switch e.Type {
+		case "alliance_formed":
+			relMap[other] = Relation{To: other, Type: "ally", Strength: 1}
+		case "betrayal", "war_started":
+			relMap[other] = Relation{To: other, Type: "enemy", Strength: 1}
+		}
+	}
+	relations := make([]Relation, 0, len(relMap))
+	for _, r := range relMap {
+		relations = append(relations, r)
+	}
+	sort.Slice(relations, func(i, j int) bool { return relations[i].To < relations[j].To })
+
+	return EntityPage{Relations: relations, RecentEvents: recent}, nil
+}
+
 type Options struct {
 	EventStore store.EventStore
 	Limit     int
@@ -92,6 +151,17 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 type Home struct {
 	Headline  *spec.Event
 	HotEvents []spec.Event
+}
+
+type EntityPage struct {
+	Relations   []Relation
+	RecentEvents []spec.Event
+}
+
+type Relation struct {
+	To       string
+	Type     string
+	Strength int // v0: fixed 1
 }
 
 // Home returns the spectator home model derived from recent events.
