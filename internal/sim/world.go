@@ -121,6 +121,8 @@ func (w *world) step() {
 		now := time.Now().Unix()
 		for _, ev := range evs {
 			ev.Ts = now
+			// Shock deltas directly impact world state (v0).
+			w.state.ApplyDelta(ev.Delta)
 			w.appendAndPublish(ev)
 		}
 	}

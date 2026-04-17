@@ -21,6 +21,8 @@ type Projection struct {
 	recent map[string][]spec.Event
 	// per world relations cache: world -> entity -> other -> relation
 	relations map[string]map[string]map[string]Relation
+	// per world relation reasons cache: world -> entity -> other -> reason
+	relationReasons map[string]map[string]map[string]RelationReason
 	limit  int
 }
 
@@ -38,6 +40,7 @@ func New(opts Options) *Projection {
 		es:     opts.EventStore,
 		recent: map[string][]spec.Event{},
 		relations: map[string]map[string]map[string]Relation{},
+		relationReasons: map[string]map[string]map[string]RelationReason{},
 		limit:  limit,
 	}
 }
@@ -93,6 +96,7 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 
 	// Build relation cache deterministically from event log (ts asc from store.Query).
 	p.relations[worldID] = map[string]map[string]Relation{}
+	p.relationReasons[worldID] = map[string]map[string]RelationReason{}
 	raw, _ := p.es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: p.limit})
 	for _, e := range raw {
 		p.applyRelationLocked(e)
@@ -111,12 +115,20 @@ type EntityPage struct {
 	RecentEvents []spec.Event
 	WhyStrong   []string
 	NextRisk    []string
+	RelationReasons []RelationReason
 }
 
 type Relation struct {
 	To       string
 	Type     string
 	Strength int // v0: fixed 1
+}
+
+type RelationReason struct {
+	To      string `json:"to"`
+	Type    string `json:"type"`
+	EventID string `json:"event_id"`
+	Note    string `json:"note"`
 }
 
 func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPage, error) {
@@ -130,6 +142,7 @@ func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPag
 	p.mu.RLock()
 	list := append([]spec.Event{}, p.recent[worldID]...)
 	relWorld := p.relations[worldID]
+	reasonWorld := p.relationReasons[worldID]
 	p.mu.RUnlock()
 
 	// Recent events affecting the entity (entity-scoped events).
@@ -169,6 +182,57 @@ func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPag
 	}
 	sort.Slice(relations, func(i, j int) bool { return relations[i].To < relations[j].To })
 
+	reasonMap := map[string]RelationReason{}
+	if reasonWorld != nil && reasonWorld[entityID] != nil {
+		for other, rr := range reasonWorld[entityID] {
+			reasonMap[other] = rr
+		}
+	}
+	reasons := make([]RelationReason, 0, len(reasonMap))
+	for _, rr := range reasonMap {
+		reasons = append(reasons, rr)
+	}
+	sort.Slice(reasons, func(i, j int) bool { return reasons[i].To < reasons[j].To })
+
+	// Add betrayal-based explanations (MVP "解说" for why_strong).
+	if len(whyStrong) < 3 {
+		for _, e := range list {
+			if e.Scope != "world" || e.Type != "betrayal" || len(e.Actors) < 2 {
+				continue
+			}
+			a := e.Actors[0]
+			b := e.Actors[1]
+			if a == entityID {
+				whyStrong = append(whyStrong, "信誉受损："+e.Narrative)
+				break
+			}
+			if b == entityID {
+				whyStrong = append(whyStrong, "遭遇背叛："+e.Narrative)
+				break
+			}
+		}
+	}
+
+	// Add shock-period explanation (MVP).
+	if len(whyStrong) < 3 {
+		for _, e := range list {
+			if e.Scope == "world" && e.Type == "shock_started" {
+				whyStrong = append(whyStrong, "冲击期："+e.Narrative)
+				break
+			}
+		}
+	}
+
+	// Add shock-warning explanation (MVP).
+	if len(whyStrong) < 3 {
+		for _, e := range list {
+			if e.Scope == "world" && e.Type == "shock_warning" {
+				whyStrong = append(whyStrong, "冲击预兆："+e.Narrative)
+				break
+			}
+		}
+	}
+
 	// If no "why strong" from events, fall back to ally relation as explanation.
 	if len(whyStrong) == 0 {
 		for _, r := range relations {
@@ -183,8 +247,12 @@ func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPag
 	nextRisk := make([]string, 0, 3)
 	for _, e := range list {
 		// world-level shocks affect everyone
-		if e.Scope == "world" && (e.Type == "shock_warning" || e.Type == "shock_started") {
-			nextRisk = append(nextRisk, "冲击风险："+e.Narrative)
+		if e.Scope == "world" && e.Type == "shock_started" {
+			nextRisk = append(nextRisk, "冲击期："+e.Narrative)
+			break
+		}
+		if e.Scope == "world" && e.Type == "shock_warning" {
+			nextRisk = append(nextRisk, "冲击预兆："+e.Narrative)
 			break
 		}
 	}
@@ -197,13 +265,17 @@ func (p *Projection) Entity(worldID, entityID string, eventLimit int) (EntityPag
 		if a != entityID && b != entityID {
 			continue
 		}
-		if e.Type == "betrayal" || e.Type == "war_started" || e.Type == "battle_resolved" {
+		if e.Type == "betrayal" {
+			nextRisk = append(nextRisk, "背叛已发生："+e.Narrative)
+			break
+		}
+		if e.Type == "war_started" || e.Type == "battle_resolved" {
 			nextRisk = append(nextRisk, "冲突升级："+e.Narrative)
 			break
 		}
 	}
 
-	return EntityPage{Relations: relations, RecentEvents: recent, WhyStrong: whyStrong, NextRisk: nextRisk}, nil
+	return EntityPage{Relations: relations, RelationReasons: reasons, RecentEvents: recent, WhyStrong: whyStrong, NextRisk: nextRisk}, nil
 }
 
 func (p *Projection) applyRelationLocked(e spec.Event) {
@@ -232,14 +304,27 @@ func (p *Projection) applyRelationLocked(e spec.Event) {
 	if p.relations[e.WorldID] == nil {
 		p.relations[e.WorldID] = map[string]map[string]Relation{}
 	}
+	if p.relationReasons[e.WorldID] == nil {
+		p.relationReasons[e.WorldID] = map[string]map[string]RelationReason{}
+	}
 	if p.relations[e.WorldID][a] == nil {
 		p.relations[e.WorldID][a] = map[string]Relation{}
 	}
 	if p.relations[e.WorldID][b] == nil {
 		p.relations[e.WorldID][b] = map[string]Relation{}
 	}
+	if p.relationReasons[e.WorldID][a] == nil {
+		p.relationReasons[e.WorldID][a] = map[string]RelationReason{}
+	}
+	if p.relationReasons[e.WorldID][b] == nil {
+		p.relationReasons[e.WorldID][b] = map[string]RelationReason{}
+	}
 	p.relations[e.WorldID][a][b] = Relation{To: b, Type: relType, Strength: 1}
 	p.relations[e.WorldID][b][a] = Relation{To: a, Type: relType, Strength: 1}
+
+	// Keep the last reason deterministic from the event log (later event overrides earlier ones).
+	p.relationReasons[e.WorldID][a][b] = RelationReason{To: b, Type: relType, EventID: e.EventID, Note: e.Narrative}
+	p.relationReasons[e.WorldID][b][a] = RelationReason{To: a, Type: relType, EventID: e.EventID, Note: e.Narrative}
 }
 
 // Home returns the spectator home model derived from recent events.

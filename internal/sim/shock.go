@@ -24,12 +24,58 @@ type ShockConfig struct {
 	Candidates []ShockCandidate
 }
 
+func pick2Distinct(worldID string, epochStart int64, pool []string) (string, string, bool) {
+	if len(pool) < 2 {
+		return "", "", false
+	}
+	r := rand.New(rand.NewSource(seedFor(worldID, epochStart) + 7))
+	i := r.Intn(len(pool))
+	j := r.Intn(len(pool) - 1)
+	if j >= i {
+		j++
+	}
+	return pool[i], pool[j], true
+}
+
+func makeBetrayalEvent(worldID string, tick int64, shockKey, causeEventID, a, b string) spec.Event {
+	return spec.Event{
+		SchemaVersion: 1,
+		EventID:       fmt.Sprintf("evt_%s_shock_%d_betrayal_%s_%s", worldID, tick, a, b),
+		Ts:            0,
+		WorldID:       worldID,
+		Scope:         "world",
+		Type:          "betrayal",
+		Actors:        []string{a, b},
+		Narrative:     fmt.Sprintf("冲击撕裂盟约：%s 背叛 %s", a, b),
+		Tick:          tick,
+		Delta: map[string]any{
+			"trust":    int64(-7),
+			"order":    int64(-5),
+			"conflict": int64(+6),
+		},
+		Trace: []spec.TraceLink{
+			{CauseEventID: causeEventID, Note: "冲击期资源紧缩导致同盟破裂"},
+			{CauseEventID: causeEventID, Note: "恐慌蔓延引发互不信任，背刺成为最短路径"},
+		},
+		Meta:          map[string]any{"shock_key": shockKey},
+	}
+}
+
 type ShockCandidate struct {
 	Key             string
 	Weight          int64
 	WarningNarrative string
 	StartedNarrative string
 	EndedNarrative   string
+
+	// Optional deltas to apply to world state when each phase happens (v0 "爽感delta").
+	WarningDelta map[string]int64
+	StartedDelta map[string]int64
+	EndedDelta   map[string]int64
+
+	// Optional actor pool for producing relationship drama during the shock.
+	// When provided (len>=2), shock_started will also emit one betrayal event between two distinct actors.
+	ActorsPool []string
 }
 
 type shockScheduler struct {
@@ -73,15 +119,23 @@ func (s *shockScheduler) step(worldID string, tick int64) []spec.Event {
 
 	var out []spec.Event
 	if s.cfg.WarningOffset > 0 && tick == epochStart-s.cfg.WarningOffset && tick >= 0 {
-		out = append(out, makeShockEvent(worldID, tick, "shock_warning", chosen.Key, chosen.WarningNarrative))
+		out = append(out, makeShockEvent(worldID, tick, "shock_warning", chosen.Key, chosen.WarningNarrative, chosen.WarningDelta))
 	}
 	if tick == epochStart {
-		out = append(out, makeShockEvent(worldID, tick, "shock_started", chosen.Key, chosen.StartedNarrative))
+		started := makeShockEvent(worldID, tick, "shock_started", chosen.Key, chosen.StartedNarrative, chosen.StartedDelta)
+		out = append(out, started)
+		// Relationship drama (v0): inject one betrayal between two actors from the configured pool.
+		if len(chosen.ActorsPool) >= 2 {
+			a, b, ok := pick2Distinct(worldID, epochStart, chosen.ActorsPool)
+			if ok {
+				out = append(out, makeBetrayalEvent(worldID, tick, chosen.Key, started.EventID, a, b))
+			}
+		}
 		s.lastKey = chosen.Key
 		s.lastStartTick = epochStart
 	}
 	if tick == epochStart+s.cfg.DurationTicks {
-		out = append(out, makeShockEvent(worldID, tick, "shock_ended", chosen.Key, chosen.EndedNarrative))
+		out = append(out, makeShockEvent(worldID, tick, "shock_ended", chosen.Key, chosen.EndedNarrative, chosen.EndedDelta))
 	}
 	return out
 }
@@ -155,9 +209,16 @@ func seedFor(worldID string, epochStart int64) int64 {
 	return int64(h.Sum64())
 }
 
-func makeShockEvent(worldID string, tick int64, typ string, shockKey string, narrative string) spec.Event {
+func makeShockEvent(worldID string, tick int64, typ string, shockKey string, narrative string, delta map[string]int64) spec.Event {
 	if narrative == "" {
 		narrative = typ
+	}
+	var d map[string]any
+	if len(delta) > 0 {
+		d = map[string]any{}
+		for k, v := range delta {
+			d[k] = v
+		}
 	}
 	return spec.Event{
 		SchemaVersion: 1,
@@ -169,6 +230,7 @@ func makeShockEvent(worldID string, tick int64, typ string, shockKey string, nar
 		Actors:        []string{"world"},
 		Narrative:     narrative,
 		Tick:          tick,
+		Delta:         d,
 		Meta:          map[string]any{"shock_key": shockKey},
 	}
 }

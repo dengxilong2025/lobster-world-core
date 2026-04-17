@@ -468,6 +468,7 @@ func NewHandler(opts Options) http.Handler {
 			"world_id":     worldID,
 			"entity_id":    entityID,
 			"relations":    page.Relations,
+			"relation_reasons": page.RelationReasons,
 			"recent_events": page.RecentEvents,
 			"why_strong":   page.WhyStrong,
 			"next_risk":    page.NextRisk,
