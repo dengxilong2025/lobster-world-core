@@ -29,6 +29,8 @@ type world struct {
 	stopCh   chan struct{}
 
 	state WorldState
+
+	shocks *shockScheduler
 }
 
 type queuedIntent struct {
@@ -57,6 +59,12 @@ func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, h
 			Conflict:   0,
 		},
 	}
+}
+
+func (w *world) setShockScheduler(s *shockScheduler) {
+	w.mu.Lock()
+	w.shocks = s
+	w.mu.Unlock()
 }
 
 func (w *world) start() {
@@ -106,6 +114,16 @@ func (w *world) step() {
 	defer w.mu.Unlock()
 
 	w.tick++
+
+	// Shock scheduler runs at tick boundaries.
+	if w.shocks != nil {
+		evs := w.shocks.step(w.worldID, w.tick)
+		now := time.Now().Unix()
+		for _, ev := range evs {
+			ev.Ts = now
+			w.appendAndPublish(ev)
+		}
+	}
 
 	if len(w.queue) == 0 {
 		return

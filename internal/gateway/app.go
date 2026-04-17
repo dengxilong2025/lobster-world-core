@@ -33,6 +33,9 @@ type AppOptions struct {
 	// TickInterval controls how fast the sim advances. Default is 5s (product choice B).
 	// Tests can override this to be much faster.
 	TickInterval time.Duration
+
+	// Shock configures the shock scheduler (P2-M3). If nil, scheduler is off.
+	Shock *sim.ShockConfig
 }
 
 func NewAppWithOptions(opts AppOptions) *App {
@@ -47,6 +50,7 @@ func NewAppWithOptions(opts AppOptions) *App {
 		EventStore:   a.EventStore,
 		Hub:          a.Hub,
 		TickInterval: opts.TickInterval,
+		Shock:        opts.Shock,
 	})
 	a.Handler = NewHandler(Options{
 		Auth:       a.Auth,
