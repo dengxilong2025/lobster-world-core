@@ -17,6 +17,7 @@ import (
 	"lobster-world-core/internal/events/store"
 	"lobster-world-core/internal/events/stream"
 	"lobster-world-core/internal/projections/spectator"
+	"lobster-world-core/internal/sim"
 )
 
 type Options struct {
@@ -25,6 +26,7 @@ type Options struct {
 	Hub        *stream.Hub
 	Adoption   *adoption.Service
 	Spectator  *spectator.Projection
+	Sim        *sim.Engine
 }
 
 // NewHandler returns the root HTTP handler for the service.
@@ -49,6 +51,10 @@ func NewHandler(opts Options) http.Handler {
 	sp := opts.Spectator
 	if sp == nil {
 		sp = spectator.New(spectator.Options{EventStore: es})
+	}
+	sm := opts.Sim
+	if sm == nil {
+		sm = sim.New(sim.Options{EventStore: es, Hub: hub})
 	}
 
 	mux := http.NewServeMux()
@@ -216,6 +222,7 @@ func NewHandler(opts Options) http.Handler {
 	// Minimal intent endpoint (v0 placeholder executor).
 	mux.HandleFunc("POST /api/v0/intents", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
+			WorldID     string   `json:"world_id"`
 			Goal        string   `json:"goal"`
 			Constraints []string `json:"constraints"`
 			Horizon     string   `json:"horizon"`
@@ -231,45 +238,22 @@ func NewHandler(opts Options) http.Handler {
 			return
 		}
 
-		intentID := "int_" + randID()
-
-		now := time.Now().Unix()
-		accepted := spec.Event{
-			SchemaVersion: 1,
-			EventID:       "evt_" + randID(),
-			Ts:            now,
-			WorldID:       "w_stone_age_1",
-			Scope:         "world",
-			Type:          "intent_accepted",
-			Actors:        []string{intentID},
-			Narrative:     fmt.Sprintf("意图接受：%s", req.Goal),
+		worldID := req.WorldID
+		if strings.TrimSpace(worldID) == "" {
+			worldID = "w_stone_age_1"
 		}
-		_ = es.Append(accepted)
-		hub.Publish(accepted)
 
-		// Placeholder executor: emit action_started/completed shortly after.
-		go func() {
-			time.Sleep(25 * time.Millisecond)
-			started := accepted
-			started.EventID = "evt_" + randID()
-			started.Ts = time.Now().Unix()
-			started.Type = "action_started"
-			started.Narrative = "行动开始：执行意图"
-			_ = es.Append(started)
-			hub.Publish(started)
-
-			time.Sleep(50 * time.Millisecond)
-			done := accepted
-			done.EventID = "evt_" + randID()
-			done.Ts = time.Now().Unix()
-			done.Type = "action_completed"
-			done.Narrative = "行动完成：意图执行完毕"
-			_ = es.Append(done)
-			hub.Publish(done)
-		}()
+		intentID := sm.SubmitIntent(worldID, sim.Intent{
+			Goal:        req.Goal,
+			Constraints: req.Constraints,
+			Horizon:     req.Horizon,
+			Risk:        req.Risk,
+			Notes:       req.Notes,
+		})
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":        true,
+			"world_id":  worldID,
 			"intent_id": intentID,
 			"accepted":  true,
 		})
@@ -435,6 +419,34 @@ func NewHandler(opts Options) http.Handler {
 			"world_id":  worldID,
 			"headline":  headline,
 			"hot_events": hot,
+		})
+	})
+
+	// World status (v0). For now it's a direct in-memory snapshot from the sim engine.
+	// Later it can be moved into a projection/read-model store.
+	mux.HandleFunc("GET /api/v0/world/status", func(w http.ResponseWriter, r *http.Request) {
+		worldID := r.URL.Query().Get("world_id")
+		if strings.TrimSpace(worldID) == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id is required")
+			return
+		}
+		st, ok := sm.GetStatus(worldID)
+		if !ok {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "world not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"world_id": st.WorldID,
+			"tick":     st.Tick,
+			"state": map[string]any{
+				"food":       st.State.Food,
+				"population": st.State.Population,
+				"order":      st.State.Order,
+				"trust":      st.State.Trust,
+				"knowledge":  st.State.Knowledge,
+				"conflict":   st.State.Conflict,
+			},
 		})
 	})
 
