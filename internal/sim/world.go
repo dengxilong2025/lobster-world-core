@@ -23,6 +23,7 @@ type world struct {
 	baseTs       int64
 	tsSeq        int64
 	maxQueue     int
+	idleTicks    int64
 
 	mu        sync.Mutex
 	tick      int64
@@ -61,6 +62,7 @@ func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, h
 		baseTs:       1700000000,
 		tsSeq:        0,
 		maxQueue:     maxQueue,
+		idleTicks:    0,
 		intentCh:     make(chan queuedIntent, 256),
 		stopCh:       make(chan struct{}),
 		state: WorldState{
@@ -181,6 +183,7 @@ func (w *world) step() {
 	w.tick++
 
 	// Shock scheduler runs at tick boundaries.
+	shockEmitted := false
 	if w.shocks != nil {
 		evs := w.shocks.step(w.worldID, w.tick)
 		for _, ev := range evs {
@@ -190,12 +193,38 @@ func (w *world) step() {
 			if err := w.appendAndPublish(ev); err != nil {
 				log.Printf("sim: failed to persist shock event world=%s type=%s err=%v", w.worldID, ev.Type, err)
 			}
+			shockEmitted = true
 		}
+	}
+	if shockEmitted {
+		w.idleTicks = 0
 	}
 
 	if len(w.queue) == 0 {
+		// Natural evolution runs when the world is idle for a while, and no shock event
+		// happened at this tick. This avoids perturbing early deterministic timelines
+		// (tests and replay), but still keeps the world alive when idle.
+		if !shockEmitted {
+			w.idleTicks++
+			const evolveEveryIdleTicks = 5
+			if w.idleTicks >= evolveEveryIdleTicks {
+				if typ, narr, delta, ok := w.evolveLocked(); ok {
+					ev := w.newEventLocked(typ, []string{"system"}, narr)
+					ev.Tick = w.tick
+					ev.Delta = delta
+					w.state.ApplyDelta(ev.Delta)
+					if err := w.appendAndPublish(ev); err != nil {
+						log.Printf("sim: failed to persist evolution event world=%s err=%v", w.worldID, err)
+					}
+				}
+				w.idleTicks = 0
+			}
+		}
 		return
 	}
+
+	// We will execute an intent this tick; reset idle counter.
+	w.idleTicks = 0
 
 	// Execute at most one intent per tick (v0 throttle; easy to reason about).
 	qi := w.queue[0]
