@@ -23,6 +23,7 @@ type world struct {
 	baseTs       int64
 	tsSeq        int64
 	maxQueue     int
+	idleTicks    int64
 
 	mu        sync.Mutex
 	tick      int64
@@ -43,6 +44,7 @@ type queuedIntent struct {
 	ID     string
 	Intent Intent
 	Ack    chan error
+	AcceptedEventID string
 }
 
 func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, hub *stream.Hub, maxQueue int) *world {
@@ -61,6 +63,7 @@ func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, h
 		baseTs:       1700000000,
 		tsSeq:        0,
 		maxQueue:     maxQueue,
+		idleTicks:    0,
 		intentCh:     make(chan queuedIntent, 256),
 		stopCh:       make(chan struct{}),
 		state: WorldState{
@@ -160,9 +163,13 @@ func (w *world) handleIntent(qi queuedIntent) {
 
 	// Emit intent_accepted immediately at current tick (tick=0 at world start is allowed).
 	ev := w.newEventLocked("intent_accepted", []string{qi.ID}, fmt.Sprintf("意图接受：%s", qi.Intent.Goal))
+	ev.Trace = []spec.TraceLink{
+		{CauseEventID: "", Note: "目标：" + qi.Intent.Goal},
+	}
 	err := w.appendAndPublish(ev)
 	if err == nil {
 		// Enqueue for future execution only if the acceptance event was durably written.
+		qi.AcceptedEventID = ev.EventID
 		w.queue = append(w.queue, qi)
 	}
 	if qi.Ack != nil {
@@ -181,6 +188,7 @@ func (w *world) step() {
 	w.tick++
 
 	// Shock scheduler runs at tick boundaries.
+	shockEmitted := false
 	if w.shocks != nil {
 		evs := w.shocks.step(w.worldID, w.tick)
 		for _, ev := range evs {
@@ -190,12 +198,43 @@ func (w *world) step() {
 			if err := w.appendAndPublish(ev); err != nil {
 				log.Printf("sim: failed to persist shock event world=%s type=%s err=%v", w.worldID, ev.Type, err)
 			}
+			shockEmitted = true
 		}
+	}
+	if shockEmitted {
+		w.idleTicks = 0
 	}
 
 	if len(w.queue) == 0 {
+		// Natural evolution runs when the world is idle for a while, and no shock event
+		// happened at this tick. This avoids perturbing early deterministic timelines
+		// (tests and replay), but still keeps the world alive when idle.
+		if !shockEmitted {
+			w.idleTicks++
+			const evolveEveryIdleTicks = 5
+			if w.idleTicks >= evolveEveryIdleTicks {
+				if typ, narr, delta, ok := w.evolveLocked(); ok {
+					pre := w.state
+					ev := w.newEventLocked(typ, []string{"system"}, narr)
+					ev.Tick = w.tick
+					ev.Delta = delta
+					ev.Trace = []spec.TraceLink{
+						{CauseEventID: "", Note: fmt.Sprintf("演化前状态：食物=%d 人口=%d 秩序=%d 信任=%d 冲突=%d", pre.Food, pre.Population, pre.Order, pre.Trust, pre.Conflict)},
+						{CauseEventID: "", Note: "演化原因：" + narr},
+					}
+					w.state.ApplyDelta(ev.Delta)
+					if err := w.appendAndPublish(ev); err != nil {
+						log.Printf("sim: failed to persist evolution event world=%s err=%v", w.worldID, err)
+					}
+				}
+				w.idleTicks = 0
+			}
+		}
 		return
 	}
+
+	// We will execute an intent this tick; reset idle counter.
+	w.idleTicks = 0
 
 	// Execute at most one intent per tick (v0 throttle; easy to reason about).
 	qi := w.queue[0]
@@ -203,6 +242,9 @@ func (w *world) step() {
 
 	started := w.newEventLocked("action_started", []string{qi.ID}, "行动开始：执行意图")
 	started.Tick = w.tick
+	if qi.AcceptedEventID != "" {
+		started.Trace = []spec.TraceLink{{CauseEventID: qi.AcceptedEventID, Note: "由意图进入执行阶段"}}
+	}
 	if err := w.appendAndPublish(started); err != nil {
 		log.Printf("sim: failed to persist action_started world=%s err=%v", w.worldID, err)
 		return
@@ -210,8 +252,21 @@ func (w *world) step() {
 
 	done := w.newEventLocked("action_completed", []string{qi.ID}, "行动完成：意图执行完毕")
 	done.Tick = w.tick
-	// Minimal delta for now (will be replaced by real world model).
-	done.Delta = map[string]any{"knowledge": 1}
+	pre := w.state
+	// v0 deterministic intent effects (placeholder rules engine).
+	done.Delta = intentDelta(qi.Intent.Goal)
+	done.Trace = append(done.Trace, spec.TraceLink{CauseEventID: started.EventID, Note: "执行完成"})
+	if qi.AcceptedEventID != "" {
+		done.Trace = append(done.Trace, spec.TraceLink{CauseEventID: qi.AcceptedEventID, Note: "回溯意图来源"})
+	}
+	done.Trace = append(done.Trace, spec.TraceLink{
+		CauseEventID: "",
+		Note:         fmt.Sprintf("执行前状态：食物=%d 人口=%d 秩序=%d 信任=%d 冲突=%d", pre.Food, pre.Population, pre.Order, pre.Trust, pre.Conflict),
+	})
+	done.Trace = append(done.Trace, spec.TraceLink{
+		CauseEventID: "",
+		Note:         "规则解释：" + explainIntentRule(qi.Intent.Goal),
+	})
 	w.state.ApplyDelta(done.Delta)
 	if err := w.appendAndPublish(done); err != nil {
 		log.Printf("sim: failed to persist action_completed world=%s err=%v", w.worldID, err)

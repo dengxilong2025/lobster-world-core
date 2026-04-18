@@ -1,0 +1,61 @@
+package gateway
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+
+	"lobster-world-core/internal/sim"
+)
+
+func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine) {
+	// Minimal intent endpoint (v0 placeholder executor).
+	mux.HandleFunc("POST /api/v0/intents", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			WorldID     string   `json:"world_id"`
+			Goal        string   `json:"goal"`
+			Constraints []string `json:"constraints"`
+			Horizon     string   `json:"horizon"`
+			Risk        string   `json:"risk"`
+			Notes       string   `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.Goal) == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "goal is required")
+			return
+		}
+
+		worldID := req.WorldID
+		if strings.TrimSpace(worldID) == "" {
+			worldID = DefaultWorldID
+		}
+
+		intentID, err := sm.SubmitIntent(worldID, sim.Intent{
+			Goal:        req.Goal,
+			Constraints: req.Constraints,
+			Horizon:     req.Horizon,
+			Risk:        req.Risk,
+			Notes:       req.Notes,
+		})
+		if err != nil {
+			if errors.Is(err, sim.ErrBusy) {
+				writeError(w, http.StatusServiceUnavailable, "BUSY", "world is busy")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to persist intent")
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":        true,
+			"world_id":  worldID,
+			"intent_id": intentID,
+			"accepted":  true,
+		})
+	})
+}
+

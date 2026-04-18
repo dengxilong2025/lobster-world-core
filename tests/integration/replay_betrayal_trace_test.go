@@ -101,12 +101,31 @@ func TestReplayHighlight_UsesBetrayalTraceNotesFromShock(t *testing.T) {
 	if !ok || len(beats) < 4 {
 		t.Fatalf("expected >=4 beats, got %#v", out["beats"])
 	}
-	b1, _ := beats[1].(map[string]any)
-	b2, _ := beats[2].(map[string]any)
-	if b1["caption"] != "因为："+note1 {
+	// Skip any injected "world stage" beat.
+	idx := 1
+	if b, _ := beats[1].(map[string]any); b != nil {
+		if cap, _ := b["caption"].(string); strings.HasPrefix(cap, "世界阶段：") {
+			idx = 2
+		}
+	}
+	// Skip optional "近期：" summary beat.
+	if b, _ := beats[idx].(map[string]any); b != nil {
+		if cap, _ := b["caption"].(string); strings.HasPrefix(cap, "近期：") {
+			idx++
+		}
+	}
+	// Skip optional "风险/建议" beat.
+	if b, _ := beats[idx].(map[string]any); b != nil {
+		if cap, _ := b["caption"].(string); strings.HasPrefix(cap, "风险：") || strings.HasPrefix(cap, "建议：") {
+			idx++
+		}
+	}
+	b1, _ := beats[idx].(map[string]any)
+	b2, _ := beats[idx+1].(map[string]any)
+	if cap, _ := b1["caption"].(string); !strings.HasPrefix(cap, "因为："+note1) {
 		t.Fatalf("expected beat[1] uses trace[0], got %#v", b1)
 	}
-	if b2["caption"] != "进展："+note2 {
+	if cap, _ := b2["caption"].(string); !strings.HasPrefix(cap, "进展："+note2) {
 		t.Fatalf("expected beat[2] uses trace[1], got %#v", b2)
 	}
 
