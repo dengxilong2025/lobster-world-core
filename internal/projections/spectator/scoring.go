@@ -1,7 +1,5 @@
 package spectator
 
-import "time"
-
 // scoreEvent assigns a "hotness" score to an event based on type and recency.
 //
 // v0 design goals:
@@ -10,7 +8,7 @@ import "time"
 // - Easy to tune via weights + half-life
 //
 // score = weight(type) / (1 + age/halfLife)
-func scoreEvent(eType string, ageSec int64) int64 {
+func scoreEventTicks(eType string, ageTicks int64, halfLifeTicks int64) int64 {
 	weight := int64(10)
 	switch eType {
 	case "betrayal":
@@ -31,13 +29,25 @@ func scoreEvent(eType string, ageSec int64) int64 {
 		weight = 15
 	}
 
-	halfLife := int64((30 * time.Minute).Seconds()) // tune later
-	if halfLife <= 0 {
-		halfLife = 1800
+	if halfLifeTicks <= 0 {
+		halfLifeTicks = 360
+	}
+	if ageTicks < 0 {
+		ageTicks = 0
+	}
+	return weight / (1 + (ageTicks / halfLifeTicks))
+}
+
+// scoreEventSec is a fallback for events that don't have tick information.
+// Kept for compatibility with legacy/manual events that only set ts.
+func scoreEventSec(eType string, ageSec int64, halfLifeSec int64) int64 {
+	if halfLifeSec <= 0 {
+		halfLifeSec = 1800
 	}
 	if ageSec < 0 {
 		ageSec = 0
 	}
-	return weight / (1 + (ageSec / halfLife))
+	// Reuse same weight table by mapping to tick scoring.
+	// (weight logic is independent; only decay differs)
+	return scoreEventTicks(eType, ageSec, halfLifeSec)
 }
-

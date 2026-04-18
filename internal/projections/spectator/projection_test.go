@@ -90,6 +90,50 @@ func TestProjectionHome_RanksByHotnessWeightThenRecency(t *testing.T) {
 	}
 }
 
+func TestProjectionHome_UsesTickBasedHalfLifeForSimEvents(t *testing.T) {
+	t.Parallel()
+
+	es := store.NewInMemoryEventStore()
+
+	// Headline is the newest by ts, and has tick information.
+	_ = es.Append(spec.Event{
+		SchemaVersion: 1,
+		EventID:       "evt_new",
+		Ts:            1000,
+		Tick:          1000,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "intent_accepted",
+		Actors:        []string{"x"},
+		Narrative:     "new",
+	})
+	// Very old betrayal with high weight, but should decay heavily when halfLifeTicks is small.
+	_ = es.Append(spec.Event{
+		SchemaVersion: 1,
+		EventID:       "evt_old_betrayal",
+		Ts:            1,
+		Tick:          1,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "betrayal",
+		Actors:        []string{"x", "y"},
+		Narrative:     "old",
+	})
+
+	p := New(Options{EventStore: es, Limit: 50, HotHalfLifeTicks: 10})
+	home, err := p.Home("w1", 2)
+	if err != nil {
+		t.Fatalf("home: %v", err)
+	}
+	if len(home.HotEvents) != 2 {
+		t.Fatalf("expected 2 hot events, got %d", len(home.HotEvents))
+	}
+	// With tiny half-life, the old betrayal should decay below the new event.
+	if home.HotEvents[0].EventID != "evt_new" {
+		t.Fatalf("expected hot[0]=evt_new with tick decay, got %s", home.HotEvents[0].EventID)
+	}
+}
+
 func TestProjectionEntity_RelationsAreDeterministicFromEventLog(t *testing.T) {
 	t.Parallel()
 

@@ -24,11 +24,15 @@ type Projection struct {
 	// per world relation reasons cache: world -> entity -> other -> reason
 	relationReasons map[string]map[string]map[string]RelationReason
 	limit  int
+	hotHalfLifeTicks int64
 }
 
 type Options struct {
 	EventStore store.EventStore
 	Limit     int
+	// HotHalfLifeTicks controls recency decay in "hot events" ranking for sim-generated events.
+	// Default 360 ticks (≈30 minutes if tickInterval is 5s).
+	HotHalfLifeTicks int64
 }
 
 func New(opts Options) *Projection {
@@ -36,12 +40,17 @@ func New(opts Options) *Projection {
 	if limit <= 0 {
 		limit = 200
 	}
+	hl := opts.HotHalfLifeTicks
+	if hl <= 0 {
+		hl = 360
+	}
 	return &Projection{
 		es:     opts.EventStore,
 		recent: map[string][]spec.Event{},
 		relations: map[string]map[string]map[string]Relation{},
 		relationReasons: map[string]map[string]map[string]RelationReason{},
 		limit:  limit,
+		hotHalfLifeTicks: hl,
 	}
 }
 
@@ -347,14 +356,22 @@ func (p *Projection) Home(worldID string, hotLimit int) (Home, error) {
 
 	// Compute hotness based on type weight + recency decay.
 	now := hl.Ts
+	nowTick := hl.Tick
 	type scored struct {
 		e     spec.Event
 		score int64
 	}
 	scoredList := make([]scored, 0, len(list))
 	for _, e := range list {
+		// Prefer tick-based decay for deterministic sim events.
+		if nowTick > 0 && e.Tick > 0 {
+			ageTicks := nowTick - e.Tick
+			scoredList = append(scoredList, scored{e: e, score: scoreEventTicks(e.Type, ageTicks, p.hotHalfLifeTicks)})
+			continue
+		}
+		// Fallback to ts-based decay for events without tick info.
 		age := now - e.Ts
-		scoredList = append(scoredList, scored{e: e, score: scoreEvent(e.Type, age)})
+		scoredList = append(scoredList, scored{e: e, score: scoreEventSec(e.Type, age, 1800)})
 	}
 	sort.Slice(scoredList, func(i, j int) bool {
 		if scoredList[i].score != scoredList[j].score {
