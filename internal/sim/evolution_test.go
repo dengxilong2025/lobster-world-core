@@ -38,6 +38,9 @@ func TestWorldStep_AppliesNaturalEvolutionWhenIdle(t *testing.T) {
 			if e.Delta == nil {
 				t.Fatalf("expected delta in world_evolved")
 			}
+			if len(e.Trace) == 0 {
+				t.Fatalf("expected trace in world_evolved")
+			}
 			break
 		}
 	}

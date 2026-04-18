@@ -31,3 +31,22 @@ func intentDelta(goal string) map[string]any {
 	return map[string]any{"knowledge": int64(1)}
 }
 
+func explainIntentRule(goal string) string {
+	g := strings.TrimSpace(goal)
+	if g == "" {
+		return "空目标 -> 知识+1"
+	}
+	if strings.Contains(g, "狩猎") || strings.Contains(g, "捕猎") || strings.Contains(g, "打猎") {
+		return "狩猎 -> 食物+8，知识+1"
+	}
+	if strings.Contains(g, "采集") || strings.Contains(g, "种植") || strings.Contains(g, "耕作") {
+		return "耕作/采集 -> 食物+5，秩序+1"
+	}
+	if strings.Contains(g, "结盟") || strings.Contains(g, "联盟") {
+		return "结盟 -> 信任+4，秩序+1，冲突-1"
+	}
+	if strings.Contains(g, "背叛") {
+		return "背叛 -> 信任-6，冲突+6，秩序-2"
+	}
+	return "探索/推进 -> 知识+1"
+}

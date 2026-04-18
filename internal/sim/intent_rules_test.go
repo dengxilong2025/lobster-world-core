@@ -35,10 +35,12 @@ func TestIntentRules_MapsGoalsToDeltas(t *testing.T) {
 			if v, ok := e.Delta["food"]; !ok || v.(int64) <= 0 {
 				t.Fatalf("expected food delta >0, got %#v", e.Delta)
 			}
+			if len(e.Trace) == 0 {
+				t.Fatalf("expected trace for action_completed")
+			}
 		}
 	}
 	if !doneFound {
 		t.Fatalf("expected action_completed event")
 	}
 }
-
