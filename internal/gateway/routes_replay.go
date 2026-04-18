@@ -64,7 +64,18 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 
 		// Prefer trace-based narration (butterfly effect explanation).
 		for i, tl := range target.Trace {
-			if strings.TrimSpace(tl.Note) == "" {
+			note := strings.TrimSpace(tl.Note)
+			// If this trace points to a concrete cause event, enrich with its narrative.
+			if tl.CauseEventID != "" {
+				if ce, ok, _ := es.GetByID(worldID, tl.CauseEventID); ok {
+					if note == "" {
+						note = ce.Narrative
+					} else {
+						note = note + "（来源：" + ce.Narrative + "）"
+					}
+				}
+			}
+			if note == "" {
 				continue
 			}
 			prefix := "进展："
@@ -75,7 +86,7 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 			} else {
 				prefix = "转折："
 			}
-			steps = append(steps, step{prefix: prefix, note: tl.Note})
+			steps = append(steps, step{prefix: prefix, note: note})
 			if len(steps) >= 4 {
 				break
 			}
@@ -183,4 +194,3 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 		}
 	})
 }
-

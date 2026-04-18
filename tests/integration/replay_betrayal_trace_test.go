@@ -103,10 +103,10 @@ func TestReplayHighlight_UsesBetrayalTraceNotesFromShock(t *testing.T) {
 	}
 	b1, _ := beats[1].(map[string]any)
 	b2, _ := beats[2].(map[string]any)
-	if b1["caption"] != "因为："+note1 {
+	if cap, _ := b1["caption"].(string); !strings.HasPrefix(cap, "因为："+note1) {
 		t.Fatalf("expected beat[1] uses trace[0], got %#v", b1)
 	}
-	if b2["caption"] != "进展："+note2 {
+	if cap, _ := b2["caption"].(string); !strings.HasPrefix(cap, "进展："+note2) {
 		t.Fatalf("expected beat[2] uses trace[1], got %#v", b2)
 	}
 
