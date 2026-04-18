@@ -244,13 +244,17 @@ func NewHandler(opts Options) http.Handler {
 			worldID = "w_stone_age_1"
 		}
 
-		intentID := sm.SubmitIntent(worldID, sim.Intent{
+		intentID, err := sm.SubmitIntent(worldID, sim.Intent{
 			Goal:        req.Goal,
 			Constraints: req.Constraints,
 			Horizon:     req.Horizon,
 			Risk:        req.Risk,
 			Notes:       req.Notes,
 		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to persist intent")
+			return
+		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":        true,
@@ -297,7 +301,10 @@ func NewHandler(opts Options) http.Handler {
 			Actors:        []string{humanID, req.LobsterID},
 			Narrative:     fmt.Sprintf("领养成立：%s 绑定 %s", humanID, req.LobsterID),
 		}
-		_ = es.Append(ev)
+		if err := es.Append(ev); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to persist event")
+			return
+		}
 		hub.Publish(ev)
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -330,7 +337,10 @@ func NewHandler(opts Options) http.Handler {
 				Actors:        []string{humanID, lobsterID},
 				Narrative:     fmt.Sprintf("解绑完成：%s 与 %s 解除绑定", humanID, lobsterID),
 			}
-			_ = es.Append(ev)
+			if err := es.Append(ev); err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to persist event")
+				return
+			}
 			hub.Publish(ev)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"ok":           true,
@@ -371,7 +381,10 @@ func NewHandler(opts Options) http.Handler {
 			Actors:        []string{humanID, req.LobsterID},
 			Narrative:     fmt.Sprintf("解绑完成：%s 与 %s 解除绑定", humanID, req.LobsterID),
 		}
-		_ = es.Append(ev)
+		if err := es.Append(ev); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to persist event")
+			return
+		}
 		hub.Publish(ev)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":           true,

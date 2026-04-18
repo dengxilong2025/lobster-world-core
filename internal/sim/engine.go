@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -70,11 +71,11 @@ func (e *Engine) EnsureWorld(worldID string) {
 	w.start()
 }
 
-func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string) {
+func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string, err error) {
 	e.mu.Lock()
 	if e.stopped {
 		e.mu.Unlock()
-		return ""
+		return "", fmt.Errorf("engine stopped")
 	}
 	e.mu.Unlock()
 	e.EnsureWorld(worldID)
@@ -83,7 +84,19 @@ func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string) {
 	w := e.worlds[worldID]
 	e.mu.Unlock()
 
-	return w.submitIntent(in)
+	if w == nil {
+		return "", fmt.Errorf("world not available")
+	}
+	id, ack := w.submitIntent(in)
+	select {
+	case aerr := <-ack:
+		if aerr != nil {
+			return "", aerr
+		}
+		return id, nil
+	case <-time.After(2 * time.Second):
+		return "", fmt.Errorf("timeout waiting for intent acceptance")
+	}
 }
 
 func (e *Engine) GetStatus(worldID string) (Status, bool) {

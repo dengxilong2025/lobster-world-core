@@ -30,8 +30,13 @@ func TestEngineStop_StopsWorldTicksAndPreventsNewIntents(t *testing.T) {
 	// Stop should be idempotent.
 	e.Stop()
 
-	// Tick should stop advancing.
-	frozen := st1.Tick
+	// Tick should stop advancing (allow one in-flight tick before stop takes effect).
+	time.Sleep(10 * time.Millisecond)
+	stStop, ok := e.GetStatus(worldID)
+	if !ok {
+		t.Fatalf("expected status ok after stop")
+	}
+	frozen := stStop.Tick
 	time.Sleep(30 * time.Millisecond)
 	st2, ok := e.GetStatus(worldID)
 	if !ok {
@@ -42,9 +47,8 @@ func TestEngineStop_StopsWorldTicksAndPreventsNewIntents(t *testing.T) {
 	}
 
 	// After Stop, new intents should not be accepted.
-	id := e.SubmitIntent(worldID, Intent{Goal: "不会被执行"})
-	if id != "" {
-		t.Fatalf("expected empty intentID after stop, got %q", id)
+	id, err := e.SubmitIntent(worldID, Intent{Goal: "不会被执行"})
+	if err == nil || id != "" {
+		t.Fatalf("expected error and empty intentID after stop, got id=%q err=%v", id, err)
 	}
 }
-

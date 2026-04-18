@@ -2,6 +2,7 @@ package sim
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"sync"
 	"time"
@@ -40,6 +41,7 @@ type world struct {
 type queuedIntent struct {
 	ID     string
 	Intent Intent
+	Ack    chan error
 }
 
 func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, hub *stream.Hub) *world {
@@ -101,14 +103,16 @@ func (w *world) stop() {
 	})
 }
 
-func (w *world) submitIntent(in Intent) string {
+func (w *world) submitIntent(in Intent) (string, <-chan error) {
 	w.mu.Lock()
 	w.intentSeq++
 	id := fmt.Sprintf("int_%s_%d", sanitize(w.worldID), w.intentSeq)
 	w.mu.Unlock()
 
-	w.intentCh <- queuedIntent{ID: id, Intent: in}
-	return id
+	ack := make(chan error, 1)
+	w.intentCh <- queuedIntent{ID: id, Intent: in, Ack: ack}
+	// Caller will wait on ack via Engine.
+	return id, ack
 }
 
 func (w *world) loop() {
@@ -131,12 +135,20 @@ func (w *world) handleIntent(qi queuedIntent) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// Enqueue for future execution.
-	w.queue = append(w.queue, qi)
-
 	// Emit intent_accepted immediately at current tick (tick=0 at world start is allowed).
 	ev := w.newEventLocked("intent_accepted", []string{qi.ID}, fmt.Sprintf("意图接受：%s", qi.Intent.Goal))
-	w.appendAndPublish(ev)
+	err := w.appendAndPublish(ev)
+	if err == nil {
+		// Enqueue for future execution only if the acceptance event was durably written.
+		w.queue = append(w.queue, qi)
+	}
+	if qi.Ack != nil {
+		select {
+		case qi.Ack <- err:
+		default:
+		}
+		close(qi.Ack)
+	}
 }
 
 func (w *world) step() {
@@ -152,7 +164,9 @@ func (w *world) step() {
 			ev.Ts = w.nextTsLocked()
 			// Shock deltas directly impact world state (v0).
 			w.state.ApplyDelta(ev.Delta)
-			w.appendAndPublish(ev)
+			if err := w.appendAndPublish(ev); err != nil {
+				log.Printf("sim: failed to persist shock event world=%s type=%s err=%v", w.worldID, ev.Type, err)
+			}
 		}
 	}
 
@@ -166,14 +180,19 @@ func (w *world) step() {
 
 	started := w.newEventLocked("action_started", []string{qi.ID}, "行动开始：执行意图")
 	started.Tick = w.tick
-	w.appendAndPublish(started)
+	if err := w.appendAndPublish(started); err != nil {
+		log.Printf("sim: failed to persist action_started world=%s err=%v", w.worldID, err)
+		return
+	}
 
 	done := w.newEventLocked("action_completed", []string{qi.ID}, "行动完成：意图执行完毕")
 	done.Tick = w.tick
 	// Minimal delta for now (will be replaced by real world model).
 	done.Delta = map[string]any{"knowledge": 1}
 	w.state.ApplyDelta(done.Delta)
-	w.appendAndPublish(done)
+	if err := w.appendAndPublish(done); err != nil {
+		log.Printf("sim: failed to persist action_completed world=%s err=%v", w.worldID, err)
+	}
 }
 
 func (w *world) newEventLocked(typ string, actors []string, narrative string) spec.Event {
@@ -191,13 +210,16 @@ func (w *world) newEventLocked(typ string, actors []string, narrative string) sp
 	}
 }
 
-func (w *world) appendAndPublish(ev spec.Event) {
+func (w *world) appendAndPublish(ev spec.Event) error {
 	if w.es != nil {
-		_ = w.es.Append(ev)
+		if err := w.es.Append(ev); err != nil {
+			return err
+		}
 	}
 	if w.hub != nil {
 		w.hub.Publish(ev)
 	}
+	return nil
 }
 
 type Status struct {
