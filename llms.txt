@@ -1,0 +1,42 @@
+Lobster World Core — LLM Quick Context (v0)
+
+目的
+- 这是一个事件溯源（Event Sourcing）+ 投影（Projection）+ 仿真引擎（Sim Engine）的“世界叙事”后端。
+- 目标是：可回放、可解释（Trace）、可测试、可长期运行。
+
+核心架构（不要偏离初心）
+1) Canonical log：internal/events/store (EventStore) 存储 spec.Event（append-only）
+2) Live delivery：internal/events/stream (Hub) 做进程内广播（SSE/投影实时更新）
+3) Simulation：internal/sim (Engine/world) 每 tick 产出事件；接收 intents；shock + 内生演化
+4) Read model：internal/projections/spectator (Projection) 从事件日志构建观战视图
+5) Gateway HTTP：internal/gateway (routes_*.go) 暴露 API
+
+关键约束/不变式
+- spec.Event.Validate：actors 必填；ts>0；world_id/type/narrative 必填；scope=world|entity
+- 状态值域：WorldState clamp（Food/Population/Order/Trust/Conflict ∈ [0,100]；Knowledge ∈ [0,1000]）
+- 防打爆：auth IP 限速；intent 队列上限（ErrBusy -> 503）
+- 决定论：同 seed + 同输入序列 -> 事件序列 & /world/status 应一致（见 tests/integration/*determinism*）
+
+主要 API（v0）
+- POST /api/v0/auth/challenge
+- POST /api/v0/auth/prove
+- GET  /api/v0/me
+- GET  /api/v0/events?world_id=&since_ts=&limit=
+- GET  /api/v0/events/stream?world_id=&since_ts=   (SSE)
+- POST /api/v0/intents {world_id, goal, ...}
+- GET  /api/v0/spectator/home?world_id=
+- GET  /api/v0/spectator/entity?world_id=&entity_id=
+- GET  /api/v0/world/status?world_id=
+- GET  /api/v0/replay/highlight?world_id=&event_id=
+- GET  /api/v0/replay/export?world_id=&limit=  (NDJSON)
+
+运行/测试
+- go test ./...
+- cmd/server: 读取环境变量（例如 LW_SHOCK_ENABLED=1 等）来启用 shock 调度
+
+代码审计建议关注（给“小蓝”）
+- 并发安全：EventStore/Hub/Projection/Engine.Stop 生命周期
+- 内存增长点：epochChoice、intent 队列、rate limiter map、projection recent cache
+- 决定论破坏点：使用 wall clock、随机数未 seed、Tick/TS 的混用
+- 协议一致性：Event.Validate 的 actors/ts/required fields
+
