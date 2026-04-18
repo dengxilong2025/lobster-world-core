@@ -56,14 +56,20 @@ func TestSpectatorHome_IncludesWorldStageAndSummary(t *testing.T) {
 	}
 	// New behavior: summary should reflect recent events (intent/shock/evolution).
 	var containsHint bool
+	var containsHook bool
 	for _, it := range world["summary"].([]any) {
 		s, _ := it.(string)
 		if strings.Contains(s, "近期") || strings.Contains(s, "刚刚") {
 			containsHint = true
-			break
+		}
+		if strings.HasPrefix(s, "看点：") {
+			containsHook = true
 		}
 	}
 	if !containsHint {
 		t.Fatalf("expected world.summary contains recent-events hint, got %#v", world["summary"])
+	}
+	if !containsHook {
+		t.Fatalf("expected world.summary contains a hook line starting with 看点：, got %#v", world["summary"])
 	}
 }

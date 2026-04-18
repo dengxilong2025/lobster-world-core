@@ -43,6 +43,25 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 		bullets = append(bullets, "近期：世界持续演化中")
 	}
 
+	// Hook line (v0 narrator): one "what to watch" sentence, derived from stage + recent.
+	hook := "看点：下一次冲击窗口可能带来关系翻转"
+	joined := strings.Join(recent, "；")
+	switch {
+	case strings.Contains(joined, "背叛") || strings.Contains(joined, "翻脸"):
+		hook = "看点：关系裂变正在扩散，留意连锁背叛与阵营重组"
+	case strings.Contains(joined, "冲击开始") || strings.Contains(joined, "天象异常") || strings.Contains(joined, "冲击结束"):
+		hook = "看点：冲击正在改写世界底层参数，观察谁会先失序/背叛"
+	case stage == "饥荒":
+		hook = "看点：饥荒会触发秩序崩塌与冲突上升，资源争夺即将爆发"
+	case stage == "战乱":
+		hook = "看点：战乱阶段容易出现盟约破裂与意外结盟，关注关键事件链"
+	case stage == "启蒙":
+		hook = "看点：知识增长可能带来制度跃迁，但也会引发新冲突"
+	case stage == "扩张":
+		hook = "看点：扩张会放大外部摩擦，留意冲击/背叛窗口"
+	}
+	bullets = append(bullets, hook)
+
 	if st.State.Food <= 20 {
 		bullets = append(bullets, "风险：食物紧缺")
 	}
