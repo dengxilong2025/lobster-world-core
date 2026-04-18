@@ -60,6 +60,10 @@ func NewHandler(opts Options) http.Handler {
 
 	mux := http.NewServeMux()
 
+	// v0 abuse protection: simple IP-based rate limit for auth endpoints.
+	// Default policy: allow short burst then throttle.
+	authLimiter := newIPRateLimiter(2, 2, 10*time.Minute) // 2 req/sec with burst 2 per IP
+
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -67,7 +71,7 @@ func NewHandler(opts Options) http.Handler {
 	})
 
 	// API v0
-	mux.HandleFunc("POST /api/v0/auth/challenge", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("POST /api/v0/auth/challenge", rateLimit(authLimiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			LobsterPubkey string `json:"lobster_pubkey"`
 			ClientTs      int64  `json:"client_ts"`
@@ -86,9 +90,9 @@ func NewHandler(opts Options) http.Handler {
 			"challenge": ch,
 			"ttl_sec":   ttl,
 		})
-	})
+	})))
 
-	mux.HandleFunc("POST /api/v0/auth/prove", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("POST /api/v0/auth/prove", rateLimit(authLimiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			LobsterPubkey string `json:"lobster_pubkey"`
 			Challenge     string `json:"challenge"`
@@ -110,7 +114,7 @@ func NewHandler(opts Options) http.Handler {
 			"expires_at":    exp,
 			"lobster_id":    lobsterID,
 		})
-	})
+	})))
 
 	mux.HandleFunc("GET /api/v0/me", func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r.Header.Get("Authorization"))
