@@ -210,8 +210,8 @@ func (w *world) step() {
 
 	done := w.newEventLocked("action_completed", []string{qi.ID}, "行动完成：意图执行完毕")
 	done.Tick = w.tick
-	// Minimal delta for now (will be replaced by real world model).
-	done.Delta = map[string]any{"knowledge": 1}
+	// v0 deterministic intent effects (placeholder rules engine).
+	done.Delta = intentDelta(qi.Intent.Goal)
 	w.state.ApplyDelta(done.Delta)
 	if err := w.appendAndPublish(done); err != nil {
 		log.Printf("sim: failed to persist action_completed world=%s err=%v", w.worldID, err)
