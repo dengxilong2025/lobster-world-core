@@ -35,6 +35,25 @@ func (s *WorldState) ApplyDelta(delta map[string]any) {
 			s.Conflict += d
 		}
 	}
+
+	// Clamp v0 indicators to keep the world state meaningful over long runs.
+	// This is a safety invariant; narrative events on clamp can be added later.
+	s.Food = clamp(s.Food, 0, 100)
+	s.Population = clamp(s.Population, 0, 100)
+	s.Order = clamp(s.Order, 0, 100)
+	s.Trust = clamp(s.Trust, 0, 100)
+	s.Conflict = clamp(s.Conflict, 0, 100)
+	s.Knowledge = clamp(s.Knowledge, 0, 1000)
+}
+
+func clamp(v, lo, hi int64) int64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func asInt64(v any) (int64, bool) {
@@ -53,4 +72,3 @@ func asInt64(v any) (int64, bool) {
 		return 0, false
 	}
 }
-
