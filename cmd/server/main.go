@@ -18,7 +18,9 @@ func main() {
 		addr = ":" + v
 	}
 
-	app := gateway.NewApp()
+	app := gateway.NewAppWithOptions(gateway.AppOptions{
+		Shock: gateway.ShockConfigFromEnv(),
+	})
 
 	srv := &http.Server{
 		Addr:              addr,
