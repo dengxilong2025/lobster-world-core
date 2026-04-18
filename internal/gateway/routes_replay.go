@@ -138,6 +138,16 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 						break
 					}
 				}
+				// Add one "风险/建议" bullet as a separate beat.
+				for _, b := range ws.Summary {
+					if strings.HasPrefix(b, "风险：") || strings.HasPrefix(b, "建议：") {
+						beats = append(beats, map[string]any{
+							"t":       6,
+							"caption": b,
+						})
+						break
+					}
+				}
 			}
 		}
 
