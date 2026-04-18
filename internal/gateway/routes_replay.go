@@ -107,7 +107,9 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 			if st, ok := sm.GetStatus(worldID); ok {
 				// Use projection to add recent-event hook to the summary (state + recent).
 				recent := []string{}
-				if sp != nil {
+				// Prefer trace causes (more meaningful than "行动完成" boilerplate).
+				recent = pickRecentFromTrace(es, worldID, target, 2)
+				if len(recent) == 0 && sp != nil {
 					if home, err := sp.Home(worldID, 10); err == nil {
 						recent = pickRecentNarratives(home, 2)
 					}

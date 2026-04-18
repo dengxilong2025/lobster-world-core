@@ -124,6 +124,11 @@ func TestReplayHighlight_IncludesRecentSummaryBeat(t *testing.T) {
 	if !found {
 		t.Fatalf("expected a recent summary beat starting with 近期：, got %#v", beats)
 	}
+	// For an action_completed replay, "近期" should prefer the meaningful cause (intent_accepted)
+	// rather than generic "行动完成" boilerplate.
+	if !strings.Contains(recentLine, "意图接受") {
+		t.Fatalf("expected recent summary references intent_accepted, got %q", recentLine)
+	}
 	// Avoid duplicated narratives inside the same 近期：... line.
 	// (e.g. "A；A" is noisy to viewers)
 	if strings.Contains(recentLine, "；") {
