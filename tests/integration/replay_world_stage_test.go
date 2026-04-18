@@ -111,16 +111,34 @@ func TestReplayHighlight_IncludesRecentSummaryBeat(t *testing.T) {
 		t.Fatalf("expected beats, got %#v", out["beats"])
 	}
 	found := false
+	var recentLine string
 	for _, it := range beats {
 		m, _ := it.(map[string]any)
 		cap, _ := m["caption"].(string)
 		if strings.HasPrefix(cap, "近期：") {
 			found = true
+			recentLine = cap
 			break
 		}
 	}
 	if !found {
 		t.Fatalf("expected a recent summary beat starting with 近期：, got %#v", beats)
+	}
+	// Avoid duplicated narratives inside the same 近期：... line.
+	// (e.g. "A；A" is noisy to viewers)
+	if strings.Contains(recentLine, "；") {
+		parts := strings.Split(strings.TrimPrefix(recentLine, "近期："), "；")
+		seen := map[string]bool{}
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if seen[p] {
+				t.Fatalf("expected recent summary deduped, got %q", recentLine)
+			}
+			seen[p] = true
+		}
 	}
 }
 

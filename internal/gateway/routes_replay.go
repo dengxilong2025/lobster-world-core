@@ -109,18 +109,7 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 				recent := []string{}
 				if sp != nil {
 					if home, err := sp.Home(worldID, 10); err == nil {
-						if home.Headline != nil && strings.TrimSpace(home.Headline.Narrative) != "" {
-							recent = append(recent, home.Headline.Narrative)
-						}
-						for _, e := range home.HotEvents {
-							if len(recent) >= 2 {
-								break
-							}
-							n := strings.TrimSpace(e.Narrative)
-							if n != "" {
-								recent = append(recent, n)
-							}
-						}
+						recent = pickRecentNarratives(home, 2)
 					}
 				}
 				ws := deriveWorldSummary(st, recent)
