@@ -566,6 +566,34 @@ func NewHandler(opts Options) http.Handler {
 			})
 		}
 
+		// Add a concrete aftermath line for relationship flips (v0).
+		// This makes replays more "documentary" instead of generic.
+		if target.Type == "betrayal" && len(target.Actors) >= 2 {
+			a := target.Actors[0]
+			b := target.Actors[1]
+			aftermath := "余波：" + a + " 与 " + b + " 翻脸"
+			if page, err := sp.Entity(worldID, a, 1); err == nil {
+				for _, rr := range page.RelationReasons {
+					if rr.To == b && rr.Type == "enemy" && rr.EventID != "" {
+						note := rr.Note
+						if strings.TrimSpace(note) == "" {
+							note = rr.EventID
+						}
+						aftermath = "余波：" + a + " 与 " + b + " 翻脸（" + note + "）"
+						break
+					}
+				}
+			}
+			tAfter := baseT + len(steps)*stepGap
+			if tAfter > 22 {
+				tAfter = 22
+			}
+			beats = append(beats, map[string]any{
+				"t":       tAfter,
+				"caption": aftermath,
+			})
+		}
+
 		beats = append(beats, map[string]any{
 			"t":       24,
 			"caption": "下一步：关注冲击/背叛/迁徙窗口",

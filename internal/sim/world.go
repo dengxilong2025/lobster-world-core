@@ -18,6 +18,9 @@ type world struct {
 	hub *stream.Hub
 
 	tickInterval time.Duration
+	seed         int64
+	baseTs       int64
+	tsSeq        int64
 
 	mu        sync.Mutex
 	tick      int64
@@ -47,6 +50,9 @@ func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, h
 		es:           es,
 		hub:          hub,
 		tickInterval: tickInterval,
+		seed:         0,
+		baseTs:       1700000000,
+		tsSeq:        0,
 		intentCh:     make(chan queuedIntent, 256),
 		stopCh:       make(chan struct{}),
 		state: WorldState{
@@ -61,10 +67,27 @@ func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, h
 	}
 }
 
+func (w *world) setSeed(seed int64) {
+	w.mu.Lock()
+	w.seed = seed
+	// Deterministic "logical time" base derived from seed.
+	// Keeps ts > 0 and stable across runs, independent from wall clock.
+	u := uint64(seed)
+	w.baseTs = 1700000000 + int64(u%1000000)
+	w.tsSeq = 0
+	w.mu.Unlock()
+}
+
 func (w *world) setShockScheduler(s *shockScheduler) {
 	w.mu.Lock()
 	w.shocks = s
 	w.mu.Unlock()
+}
+
+func (w *world) nextTsLocked() int64 {
+	// Ensure strictly increasing timestamps within the world.
+	w.tsSeq++
+	return w.baseTs + w.tick*1000 + w.tsSeq
 }
 
 func (w *world) start() {
@@ -118,9 +141,8 @@ func (w *world) step() {
 	// Shock scheduler runs at tick boundaries.
 	if w.shocks != nil {
 		evs := w.shocks.step(w.worldID, w.tick)
-		now := time.Now().Unix()
 		for _, ev := range evs {
-			ev.Ts = now
+			ev.Ts = w.nextTsLocked()
 			// Shock deltas directly impact world state (v0).
 			w.state.ApplyDelta(ev.Delta)
 			w.appendAndPublish(ev)
@@ -152,7 +174,7 @@ func (w *world) newEventLocked(typ string, actors []string, narrative string) sp
 	return spec.Event{
 		SchemaVersion: 1,
 		EventID:       fmt.Sprintf("evt_%s_%d_%d", sanitize(w.worldID), w.tick, w.eventSeq),
-		Ts:            time.Now().Unix(),
+		Ts:            w.nextTsLocked(),
 		WorldID:       w.worldID,
 		Scope:         "world",
 		Type:          typ,

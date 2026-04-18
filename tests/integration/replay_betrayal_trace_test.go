@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,6 +61,8 @@ func TestReplayHighlight_UsesBetrayalTraceNotesFromShock(t *testing.T) {
 
 	var betrayalID string
 	var note1, note2 string
+	var a1, a2 string
+	var betrayalNarrative string
 	deadline := time.Now().Add(1500 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		e := readNextDataEventLocal(t, br, 1500*time.Millisecond)
@@ -67,9 +70,13 @@ func TestReplayHighlight_UsesBetrayalTraceNotesFromShock(t *testing.T) {
 			if len(e.Trace) < 2 {
 				t.Fatalf("expected betrayal has >=2 trace notes, got %#v", e.Trace)
 			}
+			if len(e.Actors) >= 2 {
+				a1, a2 = e.Actors[0], e.Actors[1]
+			}
 			betrayalID = e.EventID
 			note1 = e.Trace[0].Note
 			note2 = e.Trace[1].Note
+			betrayalNarrative = e.Narrative
 			break
 		}
 	}
@@ -102,5 +109,24 @@ func TestReplayHighlight_UsesBetrayalTraceNotesFromShock(t *testing.T) {
 	if b2["caption"] != "进展："+note2 {
 		t.Fatalf("expected beat[2] uses trace[1], got %#v", b2)
 	}
-}
 
+	// Stage2: ensure the replay contains an "aftermath" line referencing the relationship flip.
+	foundAftermath := false
+	for _, it := range beats {
+		m, _ := it.(map[string]any)
+		cap, _ := m["caption"].(string)
+		if strings.HasPrefix(cap, "余波：") {
+			foundAftermath = true
+			if a1 != "" && (!strings.Contains(cap, a1) || !strings.Contains(cap, a2)) {
+				t.Fatalf("expected aftermath mentions actors %q/%q, got %q", a1, a2, cap)
+			}
+			if betrayalNarrative != "" && !strings.Contains(cap, betrayalNarrative) {
+				t.Fatalf("expected aftermath mentions reason note %q, got %q", betrayalNarrative, cap)
+			}
+			break
+		}
+	}
+	if !foundAftermath {
+		t.Fatalf("expected an aftermath beat starting with 余波：, got %#v", beats)
+	}
+}

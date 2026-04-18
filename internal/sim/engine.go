@@ -21,6 +21,7 @@ type Engine struct {
 
 	tickInterval time.Duration
 	shock        *ShockConfig
+	seed         int64
 
 	worlds map[string]*world
 }
@@ -30,6 +31,7 @@ type Options struct {
 	Hub           *stream.Hub
 	TickInterval  time.Duration // default 5s (product choice B)
 	Shock         *ShockConfig
+	Seed          int64
 }
 
 func New(opts Options) *Engine {
@@ -42,6 +44,7 @@ func New(opts Options) *Engine {
 		hub:          opts.Hub,
 		tickInterval: ti,
 		shock:        opts.Shock,
+		seed:         opts.Seed,
 		worlds:       map[string]*world{},
 	}
 }
@@ -54,8 +57,9 @@ func (e *Engine) EnsureWorld(worldID string) {
 		return
 	}
 	w := newWorld(worldID, e.tickInterval, e.es, e.hub)
+	w.setSeed(deriveWorldSeed(e.seed, worldID))
 	if e.shock != nil {
-		w.setShockScheduler(newShockScheduler(*e.shock))
+		w.setShockScheduler(newShockScheduler(*e.shock, w.seed))
 	}
 	e.worlds[worldID] = w
 	w.start()

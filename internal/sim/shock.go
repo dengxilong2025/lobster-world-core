@@ -24,11 +24,11 @@ type ShockConfig struct {
 	Candidates []ShockCandidate
 }
 
-func pick2Distinct(worldID string, epochStart int64, pool []string) (string, string, bool) {
+func pick2Distinct(worldSeed int64, epochStart int64, pool []string) (string, string, bool) {
 	if len(pool) < 2 {
 		return "", "", false
 	}
-	r := rand.New(rand.NewSource(seedFor(worldID, epochStart) + 7))
+	r := rand.New(rand.NewSource(seedFor(worldSeed, epochStart) + 7))
 	i := r.Intn(len(pool))
 	j := r.Intn(len(pool) - 1)
 	if j >= i {
@@ -80,6 +80,7 @@ type ShockCandidate struct {
 
 type shockScheduler struct {
 	cfg ShockConfig
+	worldSeed int64
 
 	lastKey      string
 	lastStartTick int64
@@ -88,7 +89,7 @@ type shockScheduler struct {
 	epochChoice map[int64]ShockCandidate
 }
 
-func newShockScheduler(cfg ShockConfig) *shockScheduler {
+func newShockScheduler(cfg ShockConfig, worldSeed int64) *shockScheduler {
 	if cfg.EpochTicks <= 0 {
 		cfg.EpochTicks = 720 // placeholder; production will use 72h/tickInterval
 	}
@@ -103,6 +104,7 @@ func newShockScheduler(cfg ShockConfig) *shockScheduler {
 	}
 	return &shockScheduler{
 		cfg:         cfg,
+		worldSeed:   worldSeed,
 		epochChoice: map[int64]ShockCandidate{},
 	}
 }
@@ -126,7 +128,7 @@ func (s *shockScheduler) step(worldID string, tick int64) []spec.Event {
 		out = append(out, started)
 		// Relationship drama (v0): inject one betrayal between two actors from the configured pool.
 		if len(chosen.ActorsPool) >= 2 {
-			a, b, ok := pick2Distinct(worldID, epochStart, chosen.ActorsPool)
+			a, b, ok := pick2Distinct(s.worldSeed, epochStart, chosen.ActorsPool)
 			if ok {
 				out = append(out, makeBetrayalEvent(worldID, tick, chosen.Key, started.EventID, a, b))
 			}
@@ -158,7 +160,7 @@ func (s *shockScheduler) ensureChoice(worldID string, epochStart int64) ShockCan
 		return c
 	}
 
-	r := rand.New(rand.NewSource(seedFor(worldID, epochStart)))
+	r := rand.New(rand.NewSource(seedFor(s.worldSeed, epochStart)))
 	choice := weightedPick(r, s.cfg.Candidates)
 
 	// cooldown: if repeating last key too soon, try to pick another.
@@ -202,9 +204,9 @@ func weightedPick(r *rand.Rand, items []ShockCandidate) ShockCandidate {
 	return items[len(items)-1]
 }
 
-func seedFor(worldID string, epochStart int64) int64 {
+func seedFor(worldSeed int64, epochStart int64) int64 {
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(worldID))
+	_, _ = h.Write([]byte(fmt.Sprintf("%d", worldSeed)))
 	_, _ = h.Write([]byte(fmt.Sprintf("|%d", epochStart)))
 	return int64(h.Sum64())
 }

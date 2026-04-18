@@ -36,6 +36,10 @@ type AppOptions struct {
 
 	// Shock configures the shock scheduler (P2-M3). If nil, scheduler is off.
 	Shock *sim.ShockConfig
+
+	// Seed controls determinism for simulation randomness (P3-M3).
+	// If 0, the engine derives a stable default from world_id.
+	Seed int64
 }
 
 func NewAppWithOptions(opts AppOptions) *App {
@@ -51,6 +55,7 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Hub:          a.Hub,
 		TickInterval: opts.TickInterval,
 		Shock:        opts.Shock,
+		Seed:         opts.Seed,
 	})
 	a.Handler = NewHandler(Options{
 		Auth:       a.Auth,
