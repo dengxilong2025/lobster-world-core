@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -606,6 +607,44 @@ func NewHandler(opts Options) http.Handler {
 			"duration_sec": 30,
 			"beats":     beats,
 		})
+	})
+
+	// Replay export (MVP): export canonical event log as NDJSON for deterministic replay/debugging.
+	// Output is sorted by (ts asc, event_id asc).
+	mux.HandleFunc("GET /api/v0/replay/export", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		worldID := q.Get("world_id")
+		if worldID == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id is required")
+			return
+		}
+
+		limit := 5000
+		if v := strings.TrimSpace(q.Get("limit")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				limit = n
+			}
+		}
+
+		events, err := es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: limit})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		sort.Slice(events, func(i, j int) bool {
+			if events[i].Ts != events[j].Ts {
+				return events[i].Ts < events[j].Ts
+			}
+			return events[i].EventID < events[j].EventID
+		})
+
+		w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		enc := json.NewEncoder(w)
+		for _, e := range events {
+			// Each Encode writes exactly one JSON object + newline (NDJSON).
+			_ = enc.Encode(e)
+		}
 	})
 
 	return mux
