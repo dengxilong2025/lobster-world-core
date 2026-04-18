@@ -106,3 +106,40 @@ func TestInMemoryEventStore_RejectsDuplicateEventID(t *testing.T) {
 	}
 }
 
+func TestInMemoryEventStore_GetByID(t *testing.T) {
+	t.Parallel()
+
+	s := NewInMemoryEventStore()
+	e := spec.Event{
+		SchemaVersion: 1,
+		EventID:       "evt_get",
+		Ts:            1,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "x",
+		Actors:        []string{"a"},
+		Narrative:     "n",
+	}
+	if err := s.Append(e); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	got, ok, err := s.GetByID("w1", "evt_get")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected ok=true")
+	}
+	if got.EventID != "evt_get" || got.WorldID != "w1" {
+		t.Fatalf("unexpected event: %#v", got)
+	}
+
+	_, ok, err = s.GetByID("w1", "missing")
+	if err != nil {
+		t.Fatalf("get missing: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected ok=false for missing")
+	}
+}

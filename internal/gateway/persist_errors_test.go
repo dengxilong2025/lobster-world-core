@@ -23,6 +23,9 @@ func (f failingEventStore) Append(e spec.Event) error { return errors.New("appen
 func (f failingEventStore) Query(q store.Query) ([]spec.Event, error) {
 	return []spec.Event{}, nil
 }
+func (f failingEventStore) GetByID(worldID, eventID string) (spec.Event, bool, error) {
+	return spec.Event{}, false, nil
+}
 
 func TestIntents_Returns500WhenEventPersistFails(t *testing.T) {
 	t.Parallel()
@@ -88,4 +91,3 @@ func TestAdoptionConfirm_Returns500AndDoesNotPublishWhenPersistFails(t *testing.
 		// ok
 	}
 }
-

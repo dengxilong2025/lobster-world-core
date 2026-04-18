@@ -22,6 +22,9 @@ type Query struct {
 type EventStore interface {
 	Append(e spec.Event) error
 	Query(q Query) ([]spec.Event, error)
+	// GetByID returns the event with the given event_id in the given world.
+	// Implementations should be O(1) where possible (e.g. using a secondary index).
+	GetByID(worldID, eventID string) (spec.Event, bool, error)
 }
 
 // InMemoryEventStore is a minimal v0 implementation for local development and tests.
@@ -31,12 +34,14 @@ type InMemoryEventStore struct {
 
 	byWorld map[string][]spec.Event
 	seenID  map[string]struct{}
+	byID    map[string]map[string]spec.Event // world_id -> event_id -> event
 }
 
 func NewInMemoryEventStore() *InMemoryEventStore {
 	return &InMemoryEventStore{
 		byWorld: map[string][]spec.Event{},
 		seenID:  map[string]struct{}{},
+		byID:    map[string]map[string]spec.Event{},
 	}
 }
 
@@ -54,6 +59,10 @@ func (s *InMemoryEventStore) Append(e spec.Event) error {
 	s.seenID[e.EventID] = struct{}{}
 
 	s.byWorld[e.WorldID] = append(s.byWorld[e.WorldID], e)
+	if _, ok := s.byID[e.WorldID]; !ok {
+		s.byID[e.WorldID] = map[string]spec.Event{}
+	}
+	s.byID[e.WorldID][e.EventID] = e
 
 	// Keep per-world slice sorted by (ts, event_id) so queries are stable.
 	sort.Slice(s.byWorld[e.WorldID], func(i, j int) bool {
@@ -98,10 +107,23 @@ func (s *InMemoryEventStore) Query(q Query) ([]spec.Event, error) {
 	return out, nil
 }
 
+func (s *InMemoryEventStore) GetByID(worldID, eventID string) (spec.Event, bool, error) {
+	if worldID == "" || eventID == "" {
+		return spec.Event{}, false, fmt.Errorf("world_id and event_id are required")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	m := s.byID[worldID]
+	if m == nil {
+		return spec.Event{}, false, nil
+	}
+	e, ok := m[eventID]
+	return e, ok, nil
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
-

@@ -503,14 +503,13 @@ func NewHandler(opts Options) http.Handler {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
 		}
-		var target *spec.Event
-		for i := range events {
-			if events[i].EventID == eventID {
-				target = &events[i]
-				break
-			}
+
+		target, ok, err := es.GetByID(worldID, eventID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
 		}
-		if target == nil {
+		if !ok {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "event not found")
 			return
 		}
