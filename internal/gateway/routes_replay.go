@@ -105,11 +105,39 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 		// Add a compact world-stage line (v0 "解说") based on current sim snapshot.
 		if sm != nil {
 			if st, ok := sm.GetStatus(worldID); ok {
-				ws := deriveWorldSummary(st, nil)
+				// Use projection to add recent-event hook to the summary (state + recent).
+				recent := []string{}
+				if sp != nil {
+					if home, err := sp.Home(worldID, 10); err == nil {
+						if home.Headline != nil && strings.TrimSpace(home.Headline.Narrative) != "" {
+							recent = append(recent, home.Headline.Narrative)
+						}
+						for _, e := range home.HotEvents {
+							if len(recent) >= 2 {
+								break
+							}
+							n := strings.TrimSpace(e.Narrative)
+							if n != "" {
+								recent = append(recent, n)
+							}
+						}
+					}
+				}
+				ws := deriveWorldSummary(st, recent)
 				beats = append(beats, map[string]any{
 					"t":       2,
 					"caption": "世界阶段：" + ws.Stage,
 				})
+				// Add the "近期" bullet as a separate beat (keeps structure stable).
+				for _, b := range ws.Summary {
+					if strings.HasPrefix(b, "近期：") {
+						beats = append(beats, map[string]any{
+							"t":       4,
+							"caption": b,
+						})
+						break
+					}
+				}
 			}
 		}
 

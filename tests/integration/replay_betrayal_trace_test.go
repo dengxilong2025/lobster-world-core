@@ -108,6 +108,12 @@ func TestReplayHighlight_UsesBetrayalTraceNotesFromShock(t *testing.T) {
 			idx = 2
 		}
 	}
+	// Skip optional "近期：" summary beat.
+	if b, _ := beats[idx].(map[string]any); b != nil {
+		if cap, _ := b["caption"].(string); strings.HasPrefix(cap, "近期：") {
+			idx++
+		}
+	}
 	b1, _ := beats[idx].(map[string]any)
 	b2, _ := beats[idx+1].(map[string]any)
 	if cap, _ := b1["caption"].(string); !strings.HasPrefix(cap, "因为："+note1) {
