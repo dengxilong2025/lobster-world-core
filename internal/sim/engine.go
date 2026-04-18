@@ -65,7 +65,7 @@ func (e *Engine) EnsureWorld(worldID string) {
 	w := newWorld(worldID, e.tickInterval, e.es, e.hub)
 	w.setSeed(deriveWorldSeed(e.seed, worldID))
 	if e.shock != nil {
-		w.setShockScheduler(newShockScheduler(*e.shock, w.seed))
+		w.setShockScheduler(newShockScheduler(*e.shock, w.seed, 0))
 	}
 	e.worlds[worldID] = w
 	w.start()

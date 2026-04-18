@@ -81,6 +81,8 @@ type ShockCandidate struct {
 type shockScheduler struct {
 	cfg ShockConfig
 	worldSeed int64
+	maxEpochChoices int
+	epochOrder      []int64
 
 	lastKey      string
 	lastStartTick int64
@@ -89,7 +91,7 @@ type shockScheduler struct {
 	epochChoice map[int64]ShockCandidate
 }
 
-func newShockScheduler(cfg ShockConfig, worldSeed int64) *shockScheduler {
+func newShockScheduler(cfg ShockConfig, worldSeed int64, maxEpochChoices int) *shockScheduler {
 	if cfg.EpochTicks <= 0 {
 		cfg.EpochTicks = 720 // placeholder; production will use 72h/tickInterval
 	}
@@ -102,10 +104,15 @@ func newShockScheduler(cfg ShockConfig, worldSeed int64) *shockScheduler {
 	if cfg.CooldownTicks < 0 {
 		cfg.CooldownTicks = 0
 	}
+	if maxEpochChoices <= 0 {
+		maxEpochChoices = 256
+	}
 	return &shockScheduler{
 		cfg:         cfg,
 		worldSeed:   worldSeed,
+		maxEpochChoices: maxEpochChoices,
 		epochChoice: map[int64]ShockCandidate{},
+		epochOrder:  []int64{},
 	}
 }
 
@@ -177,6 +184,16 @@ func (s *shockScheduler) ensureChoice(worldID string, epochStart int64) ShockCan
 	}
 
 	s.epochChoice[epochStart] = choice
+	s.epochOrder = append(s.epochOrder, epochStart)
+	// Bound memory: keep only the most recent N epoch choices.
+	if len(s.epochOrder) > s.maxEpochChoices {
+		excess := len(s.epochOrder) - s.maxEpochChoices
+		for i := 0; i < excess; i++ {
+			old := s.epochOrder[i]
+			delete(s.epochChoice, old)
+		}
+		s.epochOrder = s.epochOrder[excess:]
+	}
 	return choice
 }
 
