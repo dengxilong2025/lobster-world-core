@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"lobster-world-core/internal/adoption"
@@ -22,6 +23,9 @@ type App struct {
 	Adoption   *adoption.Service
 	Spectator  *spectator.Projection
 	Sim        *sim.Engine
+
+	stopOnce  sync.Once
+	hubUnsub  func()
 }
 
 // NewApp constructs the v0 application with in-memory implementations.
@@ -57,6 +61,17 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Shock:        opts.Shock,
 		Seed:         opts.Seed,
 	})
+
+	// Keep spectator projection realtime by subscribing to the in-process hub.
+	// This prevents "stale snapshot" after the first EnsureLoaded() call.
+	ch, unsub := a.Hub.Subscribe(256)
+	a.hubUnsub = unsub
+	go func() {
+		for e := range ch {
+			a.Spectator.Apply(e)
+		}
+	}()
+
 	a.Handler = NewHandler(Options{
 		Auth:       a.Auth,
 		EventStore: a.EventStore,
@@ -66,4 +81,17 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Sim:        a.Sim,
 	})
 	return a
+}
+
+// Stop gracefully stops background goroutines owned by the app (sim + realtime projection).
+// Safe to call multiple times.
+func (a *App) Stop() {
+	a.stopOnce.Do(func() {
+		if a.hubUnsub != nil {
+			a.hubUnsub()
+		}
+		if a.Sim != nil {
+			a.Sim.Stop()
+		}
+	})
 }
