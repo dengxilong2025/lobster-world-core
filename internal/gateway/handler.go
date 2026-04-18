@@ -241,7 +241,7 @@ func NewHandler(opts Options) http.Handler {
 
 		worldID := req.WorldID
 		if strings.TrimSpace(worldID) == "" {
-			worldID = "w_stone_age_1"
+			worldID = DefaultWorldID
 		}
 
 		intentID, err := sm.SubmitIntent(worldID, sim.Intent{
@@ -295,7 +295,7 @@ func NewHandler(opts Options) http.Handler {
 			SchemaVersion: 1,
 			EventID:       "evt_" + randID(),
 			Ts:            time.Now().Unix(),
-			WorldID:       "w_stone_age_1",
+			WorldID:       DefaultWorldID,
 			Scope:         "world",
 			Type:          "adoption_confirmed",
 			Actors:        []string{humanID, req.LobsterID},
@@ -331,7 +331,7 @@ func NewHandler(opts Options) http.Handler {
 				SchemaVersion: 1,
 				EventID:       "evt_" + randID(),
 				Ts:            time.Now().Unix(),
-				WorldID:       "w_stone_age_1",
+				WorldID:       DefaultWorldID,
 				Scope:         "world",
 				Type:          "adoption_revoked",
 				Actors:        []string{humanID, lobsterID},
@@ -375,7 +375,7 @@ func NewHandler(opts Options) http.Handler {
 			SchemaVersion: 1,
 			EventID:       "evt_" + randID(),
 			Ts:            time.Now().Unix(),
-			WorldID:       "w_stone_age_1",
+			WorldID:       DefaultWorldID,
 			Scope:         "world",
 			Type:          "adoption_revoked",
 			Actors:        []string{humanID, req.LobsterID},
