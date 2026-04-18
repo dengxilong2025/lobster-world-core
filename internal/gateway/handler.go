@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -256,6 +257,10 @@ func NewHandler(opts Options) http.Handler {
 			Notes:       req.Notes,
 		})
 		if err != nil {
+			if errors.Is(err, sim.ErrBusy) {
+				writeError(w, http.StatusServiceUnavailable, "BUSY", "world is busy")
+				return
+			}
 			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to persist intent")
 			return
 		}

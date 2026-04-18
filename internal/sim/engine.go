@@ -23,6 +23,7 @@ type Engine struct {
 	tickInterval time.Duration
 	shock        *ShockConfig
 	seed         int64
+	maxIntentQueue int
 
 	worlds map[string]*world
 	stopped bool
@@ -34,6 +35,9 @@ type Options struct {
 	TickInterval  time.Duration // default 5s (product choice B)
 	Shock         *ShockConfig
 	Seed          int64
+	// MaxIntentQueue bounds the number of pending intents in a world (accepted but not executed yet).
+	// This is a safety valve to prevent unbounded memory growth under burst traffic.
+	MaxIntentQueue int
 }
 
 func New(opts Options) *Engine {
@@ -41,12 +45,17 @@ func New(opts Options) *Engine {
 	if ti <= 0 {
 		ti = 5 * time.Second
 	}
+	mq := opts.MaxIntentQueue
+	if mq <= 0 {
+		mq = 1024
+	}
 	return &Engine{
 		es:           opts.EventStore,
 		hub:          opts.Hub,
 		tickInterval: ti,
 		shock:        opts.Shock,
 		seed:         opts.Seed,
+		maxIntentQueue: mq,
 		worlds:       map[string]*world{},
 		stopped:      false,
 	}
@@ -62,7 +71,7 @@ func (e *Engine) EnsureWorld(worldID string) {
 	if _, ok := e.worlds[worldID]; ok {
 		return
 	}
-	w := newWorld(worldID, e.tickInterval, e.es, e.hub)
+	w := newWorld(worldID, e.tickInterval, e.es, e.hub, e.maxIntentQueue)
 	w.setSeed(deriveWorldSeed(e.seed, worldID))
 	if e.shock != nil {
 		w.setShockScheduler(newShockScheduler(*e.shock, w.seed, 0))
@@ -87,7 +96,10 @@ func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string, err e
 	if w == nil {
 		return "", fmt.Errorf("world not available")
 	}
-	id, ack := w.submitIntent(in)
+	id, ack, qerr := w.submitIntent(in)
+	if qerr != nil {
+		return "", qerr
+	}
 	select {
 	case aerr := <-ack:
 		if aerr != nil {

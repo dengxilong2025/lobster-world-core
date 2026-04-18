@@ -22,6 +22,7 @@ type world struct {
 	seed         int64
 	baseTs       int64
 	tsSeq        int64
+	maxQueue     int
 
 	mu        sync.Mutex
 	tick      int64
@@ -44,9 +45,12 @@ type queuedIntent struct {
 	Ack    chan error
 }
 
-func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, hub *stream.Hub) *world {
+func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, hub *stream.Hub, maxQueue int) *world {
 	if tickInterval <= 0 {
 		tickInterval = 5 * time.Second
+	}
+	if maxQueue <= 0 {
+		maxQueue = 1024
 	}
 	return &world{
 		worldID:      worldID,
@@ -56,6 +60,7 @@ func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, h
 		seed:         0,
 		baseTs:       1700000000,
 		tsSeq:        0,
+		maxQueue:     maxQueue,
 		intentCh:     make(chan queuedIntent, 256),
 		stopCh:       make(chan struct{}),
 		state: WorldState{
@@ -103,16 +108,22 @@ func (w *world) stop() {
 	})
 }
 
-func (w *world) submitIntent(in Intent) (string, <-chan error) {
+func (w *world) submitIntent(in Intent) (string, <-chan error, error) {
 	w.mu.Lock()
 	w.intentSeq++
 	id := fmt.Sprintf("int_%s_%d", sanitize(w.worldID), w.intentSeq)
 	w.mu.Unlock()
 
 	ack := make(chan error, 1)
-	w.intentCh <- queuedIntent{ID: id, Intent: in, Ack: ack}
+	select {
+	case w.intentCh <- queuedIntent{ID: id, Intent: in, Ack: ack}:
+		// ok
+	default:
+		close(ack)
+		return "", nil, ErrBusy
+	}
 	// Caller will wait on ack via Engine.
-	return id, ack
+	return id, ack, nil
 }
 
 func (w *world) loop() {
@@ -134,6 +145,18 @@ func (w *world) loop() {
 func (w *world) handleIntent(qi queuedIntent) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	// Backpressure: refuse when too many pending intents are queued.
+	if w.maxQueue > 0 && len(w.queue) >= w.maxQueue {
+		if qi.Ack != nil {
+			select {
+			case qi.Ack <- ErrBusy:
+			default:
+			}
+			close(qi.Ack)
+		}
+		return
+	}
 
 	// Emit intent_accepted immediately at current tick (tick=0 at world start is allowed).
 	ev := w.newEventLocked("intent_accepted", []string{qi.ID}, fmt.Sprintf("意图接受：%s", qi.Intent.Goal))

@@ -44,6 +44,9 @@ type AppOptions struct {
 	// Seed controls determinism for simulation randomness (P3-M3).
 	// If 0, the engine derives a stable default from world_id.
 	Seed int64
+
+	// MaxIntentQueue bounds the number of pending intents per world (safety valve).
+	MaxIntentQueue int
 }
 
 func NewAppWithOptions(opts AppOptions) *App {
@@ -60,6 +63,7 @@ func NewAppWithOptions(opts AppOptions) *App {
 		TickInterval: opts.TickInterval,
 		Shock:        opts.Shock,
 		Seed:         opts.Seed,
+		MaxIntentQueue: opts.MaxIntentQueue,
 	})
 
 	// Keep spectator projection realtime by subscribing to the in-process hub.
