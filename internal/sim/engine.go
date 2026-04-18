@@ -24,6 +24,7 @@ type Engine struct {
 	seed         int64
 
 	worlds map[string]*world
+	stopped bool
 }
 
 type Options struct {
@@ -46,6 +47,7 @@ func New(opts Options) *Engine {
 		shock:        opts.Shock,
 		seed:         opts.Seed,
 		worlds:       map[string]*world{},
+		stopped:      false,
 	}
 }
 
@@ -53,6 +55,9 @@ func (e *Engine) EnsureWorld(worldID string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	if e.stopped {
+		return
+	}
 	if _, ok := e.worlds[worldID]; ok {
 		return
 	}
@@ -66,6 +71,12 @@ func (e *Engine) EnsureWorld(worldID string) {
 }
 
 func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string) {
+	e.mu.Lock()
+	if e.stopped {
+		e.mu.Unlock()
+		return ""
+	}
+	e.mu.Unlock()
 	e.EnsureWorld(worldID)
 
 	e.mu.Lock()
@@ -76,8 +87,6 @@ func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string) {
 }
 
 func (e *Engine) GetStatus(worldID string) (Status, bool) {
-	e.EnsureWorld(worldID)
-
 	e.mu.Lock()
 	w := e.worlds[worldID]
 	e.mu.Unlock()
@@ -85,4 +94,24 @@ func (e *Engine) GetStatus(worldID string) (Status, bool) {
 		return Status{}, false
 	}
 	return w.status(), true
+}
+
+// Stop terminates all world goroutines and prevents new worlds from being created.
+// It is safe to call multiple times.
+func (e *Engine) Stop() {
+	e.mu.Lock()
+	if e.stopped {
+		e.mu.Unlock()
+		return
+	}
+	e.stopped = true
+	worlds := make([]*world, 0, len(e.worlds))
+	for _, w := range e.worlds {
+		worlds = append(worlds, w)
+	}
+	e.mu.Unlock()
+
+	for _, w := range worlds {
+		w.stop()
+	}
 }

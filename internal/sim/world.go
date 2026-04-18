@@ -30,6 +30,7 @@ type world struct {
 
 	intentCh chan queuedIntent
 	stopCh   chan struct{}
+	stopOnce sync.Once
 
 	state WorldState
 
@@ -92,6 +93,12 @@ func (w *world) nextTsLocked() int64 {
 
 func (w *world) start() {
 	go w.loop()
+}
+
+func (w *world) stop() {
+	w.stopOnce.Do(func() {
+		close(w.stopCh)
+	})
 }
 
 func (w *world) submitIntent(in Intent) string {
