@@ -105,7 +105,7 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 		// Add a compact world-stage line (v0 "解说") based on current sim snapshot.
 		if sm != nil {
 			if st, ok := sm.GetStatus(worldID); ok {
-				ws := deriveWorldSummary(st)
+				ws := deriveWorldSummary(st, nil)
 				beats = append(beats, map[string]any{
 					"t":       2,
 					"caption": "世界阶段：" + ws.Stage,

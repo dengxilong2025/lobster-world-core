@@ -25,7 +25,20 @@ func registerSpectatorRoutes(mux *http.ServeMux, sp *spectator.Projection, sm *s
 		// Derive a minimal world stage/summary from the sim snapshot (v0 "解说" layer).
 		var world any = nil
 		if st, ok := sm.GetStatus(worldID); ok {
-			world = deriveWorldSummary(st)
+			recent := make([]string, 0, 2)
+			if home.Headline != nil && strings.TrimSpace(home.Headline.Narrative) != "" {
+				recent = append(recent, home.Headline.Narrative)
+			}
+			for _, e := range home.HotEvents {
+				if len(recent) >= 2 {
+					break
+				}
+				n := strings.TrimSpace(e.Narrative)
+				if n != "" {
+					recent = append(recent, n)
+				}
+			}
+			world = deriveWorldSummary(st, recent)
 		}
 
 		headline := map[string]any{}

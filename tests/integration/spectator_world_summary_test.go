@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"strings"
 
 	"lobster-world-core/internal/gateway"
 )
@@ -53,5 +54,16 @@ func TestSpectatorHome_IncludesWorldStageAndSummary(t *testing.T) {
 	if _, ok := world["summary"].([]any); !ok {
 		t.Fatalf("expected world.summary array, got %#v", world["summary"])
 	}
+	// New behavior: summary should reflect recent events (intent/shock/evolution).
+	var containsHint bool
+	for _, it := range world["summary"].([]any) {
+		s, _ := it.(string)
+		if strings.Contains(s, "近期") || strings.Contains(s, "刚刚") {
+			containsHint = true
+			break
+		}
+	}
+	if !containsHint {
+		t.Fatalf("expected world.summary contains recent-events hint, got %#v", world["summary"])
+	}
 }
-

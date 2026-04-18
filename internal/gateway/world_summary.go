@@ -13,7 +13,7 @@ type WorldSummary struct {
 	State   map[string]any `json:"state"`
 }
 
-func deriveWorldSummary(st sim.Status) WorldSummary {
+func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 	stage := "萌芽"
 	switch {
 	case st.State.Conflict >= 70:
@@ -28,8 +28,21 @@ func deriveWorldSummary(st sim.Status) WorldSummary {
 		stage = "扩张"
 	}
 
-	bullets := make([]string, 0, 4)
+	bullets := make([]string, 0, 6)
 	bullets = append(bullets, fmt.Sprintf("阶段：%s", stage))
+
+	// Recent narrative hook (v0): keep it short and human-readable.
+	if len(recent) > 0 {
+		// Pick up to 2 lines.
+		lines := recent
+		if len(lines) > 2 {
+			lines = lines[:2]
+		}
+		bullets = append(bullets, "近期："+strings.Join(lines, "；"))
+	} else if st.Tick > 0 {
+		bullets = append(bullets, "近期：世界持续演化中")
+	}
+
 	if st.State.Food <= 20 {
 		bullets = append(bullets, "风险：食物紧缺")
 	}
@@ -39,8 +52,20 @@ func deriveWorldSummary(st sim.Status) WorldSummary {
 	if st.State.Trust <= 25 {
 		bullets = append(bullets, "风险：互不信任蔓延")
 	}
-	if len(bullets) < 2 {
+	if len(bullets) < 3 {
 		bullets = append(bullets, "建议：继续提交意图推动世界叙事")
+	} else {
+		// Add one action hint based on stage.
+		switch stage {
+		case "饥荒":
+			bullets = append(bullets, "建议：优先补给与秩序恢复")
+		case "战乱":
+			bullets = append(bullets, "建议：结盟/谈判或做好冲突升级准备")
+		case "失序":
+			bullets = append(bullets, "建议：稳定秩序，避免连锁崩溃")
+		default:
+			bullets = append(bullets, "建议：推进关键意图，制造戏剧性节点")
+		}
 	}
 
 	// Deduplicate (just in case).
@@ -72,4 +97,3 @@ func deriveWorldSummary(st sim.Status) WorldSummary {
 		},
 	}
 }
-
