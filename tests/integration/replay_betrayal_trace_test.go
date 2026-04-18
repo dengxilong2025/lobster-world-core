@@ -101,8 +101,15 @@ func TestReplayHighlight_UsesBetrayalTraceNotesFromShock(t *testing.T) {
 	if !ok || len(beats) < 4 {
 		t.Fatalf("expected >=4 beats, got %#v", out["beats"])
 	}
-	b1, _ := beats[1].(map[string]any)
-	b2, _ := beats[2].(map[string]any)
+	// Skip any injected "world stage" beat.
+	idx := 1
+	if b, _ := beats[1].(map[string]any); b != nil {
+		if cap, _ := b["caption"].(string); strings.HasPrefix(cap, "世界阶段：") {
+			idx = 2
+		}
+	}
+	b1, _ := beats[idx].(map[string]any)
+	b2, _ := beats[idx+1].(map[string]any)
 	if cap, _ := b1["caption"].(string); !strings.HasPrefix(cap, "因为："+note1) {
 		t.Fatalf("expected beat[1] uses trace[0], got %#v", b1)
 	}

@@ -10,9 +10,10 @@ import (
 	"lobster-world-core/internal/events/spec"
 	"lobster-world-core/internal/events/store"
 	"lobster-world-core/internal/projections/spectator"
+	"lobster-world-core/internal/sim"
 )
 
-func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator.Projection) {
+func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator.Projection, sm *sim.Engine) {
 	// Replay highlight (MVP): return a structured "script replay" for 30s.
 	mux.HandleFunc("GET /api/v0/replay/highlight", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -100,6 +101,17 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 
 		beats := make([]map[string]any, 0, 6)
 		beats = append(beats, map[string]any{"t": 0, "caption": beat1})
+
+		// Add a compact world-stage line (v0 "解说") based on current sim snapshot.
+		if sm != nil {
+			if st, ok := sm.GetStatus(worldID); ok {
+				ws := deriveWorldSummary(st)
+				beats = append(beats, map[string]any{
+					"t":       2,
+					"caption": "世界阶段：" + ws.Stage,
+				})
+			}
+		}
 
 		// Spread steps across the middle timeline.
 		baseT := 8

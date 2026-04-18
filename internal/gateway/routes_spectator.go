@@ -22,6 +22,12 @@ func registerSpectatorRoutes(mux *http.ServeMux, sp *spectator.Projection, sm *s
 			return
 		}
 
+		// Derive a minimal world stage/summary from the sim snapshot (v0 "解说" layer).
+		var world any = nil
+		if st, ok := sm.GetStatus(worldID); ok {
+			world = deriveWorldSummary(st)
+		}
+
 		headline := map[string]any{}
 		if home.Headline != nil {
 			headline = map[string]any{
@@ -47,6 +53,7 @@ func registerSpectatorRoutes(mux *http.ServeMux, sp *spectator.Projection, sm *s
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":         true,
 			"world_id":   worldID,
+			"world":      world,
 			"headline":   headline,
 			"hot_events": hot,
 		})
@@ -105,4 +112,3 @@ func registerSpectatorRoutes(mux *http.ServeMux, sp *spectator.Projection, sm *s
 		})
 	})
 }
-
