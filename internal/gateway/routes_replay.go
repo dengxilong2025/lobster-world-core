@@ -115,37 +115,25 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 					}
 				}
 				ws := deriveWorldSummary(st, recent)
-				beats = append(beats, map[string]any{
-					"t":       2,
-					"caption": "世界阶段：" + ws.Stage,
-				})
+				beats = append(beats, map[string]any{"t": 2, "caption": "世界阶段：" + ws.Stage})
 				// Add the "近期" bullet as a separate beat (keeps structure stable).
 				for _, b := range ws.Summary {
 					if strings.HasPrefix(b, "近期：") {
-						beats = append(beats, map[string]any{
-							"t":       4,
-							"caption": b,
-						})
+						beats = append(beats, map[string]any{"t": 4, "caption": b})
 						break
 					}
 				}
 				// Add one "风险/建议" bullet as a separate beat.
 				for _, b := range ws.Summary {
 					if strings.HasPrefix(b, "风险：") || strings.HasPrefix(b, "建议：") {
-						beats = append(beats, map[string]any{
-							"t":       6,
-							"caption": b,
-						})
+						beats = append(beats, map[string]any{"t": 6, "caption": b})
 						break
 					}
 				}
 				// Add one "看点" bullet as a separate beat.
 				for _, b := range ws.Summary {
 					if strings.HasPrefix(b, "看点：") {
-						beats = append(beats, map[string]any{
-							"t":       6,
-							"caption": b,
-						})
+						beats = append(beats, map[string]any{"t": 7, "caption": b})
 						break
 					}
 				}
@@ -193,9 +181,18 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 			})
 		}
 
-		beats = append(beats, map[string]any{
-			"t":       24,
-			"caption": "下一步：关注冲击/背叛/迁徙窗口",
+		beats = append(beats, map[string]any{"t": 28, "caption": "下一步：关注冲击/背叛/迁徙窗口"})
+
+		// Ensure output is stable and easy for clients: sort by t asc, then caption asc.
+		sort.SliceStable(beats, func(i, j int) bool {
+			ti, _ := beats[i]["t"].(int)
+			tj, _ := beats[j]["t"].(int)
+			if ti != tj {
+				return ti < tj
+			}
+			ci, _ := beats[i]["caption"].(string)
+			cj, _ := beats[j]["caption"].(string)
+			return ci < cj
 		})
 
 		writeJSON(w, http.StatusOK, map[string]any{

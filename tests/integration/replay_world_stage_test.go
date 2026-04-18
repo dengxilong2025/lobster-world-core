@@ -258,3 +258,61 @@ func TestReplayHighlight_IncludesHookBeat(t *testing.T) {
 		t.Fatalf("expected a hook beat starting with 看点：, got %#v", beats)
 	}
 }
+
+func TestReplayHighlight_BeatsHaveStrictlyIncreasingTimeline(t *testing.T) {
+	t.Parallel()
+
+	app := gateway.NewAppWithOptions(gateway.AppOptions{TickInterval: 20 * time.Millisecond})
+	s := httptest.NewServer(app.Handler)
+	t.Cleanup(s.Close)
+	t.Cleanup(func() { app.Stop() })
+
+	worldID := "w_rp_timeline"
+	body, _ := json.Marshal(map[string]any{"world_id": worldID, "goal": "去狩猎获取食物"})
+	resp, err := http.Post(s.URL+"/api/v0/intents", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+
+	events := waitEvents(t, app.EventStore, worldID, 3, 1200*time.Millisecond)
+	var targetID string
+	for _, e := range events {
+		if e.Type == "action_completed" {
+			targetID = e.EventID
+			break
+		}
+	}
+	if targetID == "" {
+		t.Fatalf("expected action_completed")
+	}
+
+	rp, err := http.Get(s.URL + "/api/v0/replay/highlight?world_id=" + worldID + "&event_id=" + targetID)
+	if err != nil {
+		t.Fatalf("get replay: %v", err)
+	}
+	defer rp.Body.Close()
+
+	var out map[string]any
+	if err := json.NewDecoder(rp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	beats, ok := out["beats"].([]any)
+	if !ok || len(beats) == 0 {
+		t.Fatalf("expected beats, got %#v", out["beats"])
+	}
+
+	prev := -1
+	for i, it := range beats {
+		m, _ := it.(map[string]any)
+		tv, ok := m["t"].(float64)
+		if !ok {
+			t.Fatalf("expected numeric t at %d, got %#v", i, m["t"])
+		}
+		tcur := int(tv)
+		if tcur <= prev {
+			t.Fatalf("expected strictly increasing t, got %d then %d (index=%d) beats=%#v", prev, tcur, i, beats)
+		}
+		prev = tcur
+	}
+}
