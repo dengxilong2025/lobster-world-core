@@ -36,6 +36,12 @@ func TestUIAssets_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "/assets/production/manifest.json") {
 		t.Fatalf("expected page references manifest.json")
 	}
+	if !strings.Contains(body, "id=\"asset_modal\"") {
+		t.Fatalf("expected assets page contains #asset_modal")
+	}
+	if !strings.Contains(body, "id=\"canvas_3x3\"") {
+		t.Fatalf("expected assets page contains #canvas_3x3")
+	}
 }
 
 func TestAssetManifest_Served(t *testing.T) {
