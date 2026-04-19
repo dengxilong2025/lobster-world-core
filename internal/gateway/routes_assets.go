@@ -3,6 +3,7 @@ package gateway
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 )
 
 func registerAssetRoutes(mux *http.ServeMux) {
@@ -31,17 +32,29 @@ func registerAssetRoutes(mux *http.ServeMux) {
 }
 
 func assetProductionDir() string {
-	// Prefer repo-relative path when running locally.
-	for _, p := range []string{
-		"assets/production",
-		"../assets/production",
-		"/assets/production", // useful in containers if we copy assets to /assets/production
-	} {
-		if st, err := os.Stat(p); err == nil && st.IsDir() {
-			return p
+	// Useful in containers if we copy assets to /assets/production.
+	if st, err := os.Stat("/assets/production"); err == nil && st.IsDir() {
+		return "/assets/production"
+	}
+
+	// In Go tests, the working directory is typically the package directory
+	// (e.g. tests/integration or internal/gateway), so "assets/production" is
+	// not directly reachable. Search upward from cwd to find the repo root.
+	if wd, err := os.Getwd(); err == nil {
+		cur := wd
+		for i := 0; i < 10; i++ {
+			cand := filepath.Join(cur, "assets", "production")
+			if st, err := os.Stat(cand); err == nil && st.IsDir() {
+				return cand
+			}
+			parent := filepath.Dir(cur)
+			if parent == cur {
+				break
+			}
+			cur = parent
 		}
 	}
 
 	// Fall back to repo-relative; FileServer will 404 if missing.
-	return "assets/production"
+	return filepath.Join("assets", "production")
 }
