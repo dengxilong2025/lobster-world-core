@@ -33,6 +33,26 @@ http://localhost:8080/ui
 
 ---
 
+## 2.5) 一键启动（Docker Compose，推荐给非开发同学/智能体机）
+
+在仓库根目录执行：
+
+```bash
+docker compose up --build
+```
+
+启动后打开：
+```
+http://localhost:8080/ui
+```
+
+停止：
+```bash
+docker compose down
+```
+
+---
+
 ## 3) /ui 页面元素（给自动化/智能体脚本）
 
 页面中固定的 DOM id（后续尽量不变）：
