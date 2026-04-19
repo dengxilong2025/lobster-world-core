@@ -103,6 +103,43 @@ const uiAssetsPageHTML = `<!doctype html>
       }
     }
 
+    function computeAlphaStats(img, cat){
+      // Draw into an offscreen canvas to examine alpha distribution.
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (!w || !h) return null;
+
+      const oc = document.createElement('canvas');
+      oc.width = w;
+      oc.height = h;
+      const ctx = oc.getContext('2d', { willReadFrequently: true });
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+
+      let zero = 0, mid = 0, full = 0;
+      const total = w * h;
+      for (let i = 3; i < data.length; i += 4) {
+        const a = data[i];
+        if (a === 0) zero++;
+        else if (a === 255) full++;
+        else mid++;
+      }
+      const rz = zero / total;
+      const rm = mid / total;
+      const rf = full / total;
+
+      let warn = '';
+      if (cat === 'tiles.base' && rz > 0.05) {
+        warn = '注意：该地表瓦片存在较大透明区域，可能是误抠或通道异常（类似 glitch 案例）。';
+      }
+      if (cat === 'ui.icons' && rf === 1.0) {
+        warn = '注意：该图标可能没有透明背景（alpha 全 255）。';
+      }
+
+      return { w, h, rz, rm, rf, warn };
+    }
+
     function closeModal(){
       el('asset_modal').style.display = 'none';
     }
@@ -118,14 +155,23 @@ const uiAssetsPageHTML = `<!doctype html>
 
       const img = el('modal_img');
       img.onload = () => {
+        const st = computeAlphaStats(img, cat);
+        if (st) {
+          const pct = (x) => Math.round(x * 1000) / 10; // 0.1%
+          let msg = 'alpha 统计：透明 ' + pct(st.rz) + '%，半透明 ' + pct(st.rm) + '%，不透明 ' + pct(st.rf) + '%';
+          if (st.warn) msg += '；' + st.warn;
+          el('qc_stats').textContent = msg;
+        } else {
+          el('qc_stats').textContent = 'alpha 统计：无法计算';
+        }
+
         if (cat === 'tiles.base') {
           draw3x3(img);
-          el('qc_stats').textContent = '已生成 3×3 拼贴预览（用于观察接缝与重复感）';
         } else {
           const c = el('canvas_3x3');
           const ctx = c.getContext('2d');
           ctx.clearRect(0,0,c.width,c.height);
-          el('qc_stats').textContent = '该分类不做 3×3 拼贴预览';
+          // keep qc_stats (alpha message). Just avoid implying 3×3 is available.
         }
       };
       img.onerror = () => {
