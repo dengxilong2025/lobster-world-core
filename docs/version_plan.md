@@ -33,6 +33,7 @@
   - 观战 home（阶段/摘要/热点）
   - 打开 replay/highlight
   - 导出 replay/export
+- 建议：`/ui` 支持脚本化参数（`world_id/goal/autoconnect`），便于 20 智能体批测
 - 部署到一个稳定地址（或提供 docker compose 一键启动）
 
 ### v0.2-M2：智能体体验测试通道
@@ -89,4 +90,3 @@
 - API/事件结构稳定
 - 观测、部署、回归、发布流程完整
 - 官网/宣发与内容生产有稳定流水线
-
