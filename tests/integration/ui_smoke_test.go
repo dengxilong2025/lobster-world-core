@@ -53,4 +53,12 @@ func TestUI_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "/api/v0/replay/highlight") {
 		t.Fatalf("expected page references replay/highlight endpoint")
 	}
+	// /ui should support query params for agentic usage (world_id/goal) and optional autoconnect.
+	// We assert code presence rather than full browser execution.
+	if !strings.Contains(body, "URLSearchParams") {
+		t.Fatalf("expected /ui parses URLSearchParams for scriptable params")
+	}
+	if !strings.Contains(body, "autoconnect") {
+		t.Fatalf("expected /ui supports autoconnect param")
+	}
 }

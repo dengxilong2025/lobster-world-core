@@ -155,6 +155,23 @@ const uiPageHTML = `<!doctype html>
         connectSSE(worldId);
         fetchHome(worldId).catch(() => {});
       };
+
+      // Scriptable params for agentic testing:
+      // /ui?world_id=w1&goal=...&autoconnect=1
+      (function initFromQuery() {
+        try {
+          const qs = new URLSearchParams(window.location.search);
+          const wid = (qs.get('world_id') || '').trim();
+          const goal = (qs.get('goal') || '').trim();
+          const autoconnect = (qs.get('autoconnect') || '').trim();
+          if (wid) $('world_id').value = wid;
+          if (goal) $('goal').value = goal;
+          if (wid && (autoconnect === '1' || autoconnect === 'true')) {
+            connectSSE(wid);
+            fetchHome(wid).catch(() => {});
+          }
+        } catch (_) {}
+      })();
     </script>
   </body>
 </html>`;
