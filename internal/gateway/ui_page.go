@@ -31,6 +31,7 @@ const uiPageHTML = `<!doctype html>
       <label>goal：<input id="goal" placeholder="例如 去狩猎获取食物" size="32" /></label>
       <button id="btn_intent">提交意图</button>
       <button id="btn_connect">连接事件流</button>
+      <button id="btn_export">导出回放（NDJSON）</button>
       <span id="status" class="muted"></span>
     </div>
 
@@ -52,6 +53,7 @@ const uiPageHTML = `<!doctype html>
       const API_EVENTS  = '/api/v0/events';
       const API_HOME    = '/api/v0/spectator/home';
       const API_HIGHLIGHT = '/api/v0/replay/highlight';
+      const API_EXPORT = '/api/v0/replay/export';
 
       const $ = (id) => document.getElementById(id);
       const statusEl = $('status');
@@ -154,6 +156,13 @@ const uiPageHTML = `<!doctype html>
         setStatus('连接中...');
         connectSSE(worldId);
         fetchHome(worldId).catch(() => {});
+      };
+
+      $('btn_export').onclick = () => {
+        const worldId = $('world_id').value.trim();
+        if (!worldId) { setStatus('world_id 不能为空'); return; }
+        const url = API_EXPORT + '?world_id=' + encodeURIComponent(worldId);
+        window.open(url, '_blank', 'noreferrer');
       };
 
       // Scriptable params for agentic testing:

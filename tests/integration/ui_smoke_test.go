@@ -61,4 +61,12 @@ func TestUI_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "autoconnect") {
 		t.Fatalf("expected /ui supports autoconnect param")
 	}
+
+	// Export entrypoint should be discoverable from UI (v0.2 requirement).
+	if !strings.Contains(body, "/api/v0/replay/export") {
+		t.Fatalf("expected page references replay/export endpoint")
+	}
+	if !strings.Contains(body, "id=\"btn_export\"") {
+		t.Fatalf("expected export button id=btn_export")
+	}
 }
