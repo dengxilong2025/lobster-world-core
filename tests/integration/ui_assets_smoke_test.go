@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -63,3 +64,22 @@ func TestAssetManifest_Served(t *testing.T) {
 	}
 }
 
+func TestAssetManifest_FileExistsInRepo(t *testing.T) {
+	t.Parallel()
+
+	// `go test` runs each package with its own working directory (often the package dir),
+	// so we probe a few repo-relative locations rather than assuming repo root.
+	paths := []string{
+		"assets/production/manifest.json",
+		"../assets/production/manifest.json",
+		"../../assets/production/manifest.json",
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return
+		}
+	}
+
+	wd, _ := os.Getwd()
+	t.Fatalf("expected assets/production/manifest.json present in repo (wd=%q, tried=%v)", wd, paths)
+}
