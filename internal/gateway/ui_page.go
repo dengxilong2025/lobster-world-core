@@ -43,17 +43,22 @@ const uiPageHTML = `<!doctype html>
     <h2>事件流（最新）</h2>
     <pre id="events"></pre>
 
+    <h2>回放入口（最近事件）</h2>
+    <ul id="replays"></ul>
+
     <script>
       // Endpoints (keep as literal strings for tests)
       const API_INTENTS = '/api/v0/intents';
       const API_EVENTS  = '/api/v0/events';
       const API_HOME    = '/api/v0/spectator/home';
+      const API_HIGHLIGHT = '/api/v0/replay/highlight';
 
       const $ = (id) => document.getElementById(id);
       const statusEl = $('status');
       const eventsEl = $('events');
       const stageEl = $('world_stage');
       const summaryEl = $('world_summary');
+      const replaysEl = $('replays');
 
       let es = null;
       let lastEvents = [];
@@ -81,6 +86,19 @@ const uiPageHTML = `<!doctype html>
         eventsEl.textContent = lastEvents.join('\\n');
       }
 
+      function addReplayLink(worldId, eventId, label) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = API_HIGHLIGHT + '?world_id=' + encodeURIComponent(worldId) + '&event_id=' + encodeURIComponent(eventId);
+        a.target = '_blank';
+        a.rel = 'noreferrer';
+        a.textContent = label || ('replay ' + eventId);
+        li.appendChild(a);
+        replaysEl.insertBefore(li, replaysEl.firstChild);
+        // keep only recent N
+        while (replaysEl.children.length > 20) replaysEl.removeChild(replaysEl.lastChild);
+      }
+
       async function postIntent(worldId, goal) {
         const resp = await fetch(API_INTENTS, {
           method: 'POST',
@@ -103,6 +121,14 @@ const uiPageHTML = `<!doctype html>
           lastEvents.push(ev.data);
           if (lastEvents.length > 200) lastEvents = lastEvents.slice(-200);
           renderEvents();
+          // best-effort parse to expose replay entrypoint
+          try {
+            const obj = JSON.parse(ev.data);
+            if (obj && obj.event_id) {
+              const title = (obj.narrative || obj.type || 'event') + '（' + obj.event_id + '）';
+              addReplayLink(worldId, obj.event_id, title);
+            }
+          } catch (_) {}
           // refresh summary after events (best-effort)
           fetchHome(worldId).catch(() => {});
         };
@@ -132,4 +158,3 @@ const uiPageHTML = `<!doctype html>
     </script>
   </body>
 </html>`;
-

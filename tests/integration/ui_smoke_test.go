@@ -43,5 +43,14 @@ func TestUI_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "/api/v0/intents") || !strings.Contains(body, "/api/v0/events") {
 		t.Fatalf("expected page references v0 api endpoints")
 	}
+	// Ensure key DOM ids exist for agentic testers.
+	for _, id := range []string{"btn_intent", "btn_connect", "events", "world_stage", "world_summary"} {
+		if !strings.Contains(body, "id=\""+id+"\"") {
+			t.Fatalf("expected element id=%q", id)
+		}
+	}
+	// Replay entrypoint should be discoverable from UI.
+	if !strings.Contains(body, "/api/v0/replay/highlight") {
+		t.Fatalf("expected page references replay/highlight endpoint")
+	}
 }
-
