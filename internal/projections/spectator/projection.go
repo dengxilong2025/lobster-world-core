@@ -81,9 +81,6 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 	p.mu.RLock()
 	_, ok := p.recent[worldID]
 	p.mu.RUnlock()
-	if ok {
-		return nil
-	}
 	if p.es == nil {
 		return nil
 	}
@@ -101,6 +98,17 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 		}
 		return events[i].EventID > events[j].EventID
 	})
+	// If cache exists and appears up-to-date, skip rebuild to reduce churn.
+	if ok {
+		cur := p.recent[worldID]
+		if len(cur) == len(events) {
+			sameHead := (len(cur) == 0 && len(events) == 0) || (len(cur) > 0 && len(events) > 0 && cur[0].EventID == events[0].EventID)
+			if sameHead {
+				p.mu.Unlock()
+				return nil
+			}
+		}
+	}
 	p.recent[worldID] = events
 
 	// Build relation cache deterministically from event log (ts asc from store.Query).
