@@ -17,6 +17,8 @@ const uiAssetsPageHTML = `<!doctype html>
     .thumb img { max-width: 100%; max-height: 100%; image-rendering: auto; }
     .name { margin-top: 8px; font-size: 12px; word-break: break-all; }
     .tag { display:inline-block; font-size: 11px; padding:2px 6px; border-radius: 999px; background:#eee; margin-top:6px; color:#333; }
+    .modal_backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; }
+    .modal_panel { max-width:980px; margin:40px auto; background:#fff; border-radius:12px; padding:16px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
   </style>
 </head>
 <body>
@@ -40,6 +42,29 @@ const uiAssetsPageHTML = `<!doctype html>
   <div id="status" class="hint" style="margin-top:10px;"></div>
   <div id="grid" class="grid"></div>
 
+  <div id="asset_modal" class="modal_backdrop">
+    <div class="modal_panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <div>
+          <div id="modal_title" style="font-weight:600;"></div>
+          <div id="modal_meta" class="hint"></div>
+        </div>
+        <button id="modal_close" style="padding:6px 10px;">关闭</button>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+        <div>
+          <div class="hint">原图预览（点击可在新标签打开）</div>
+          <a id="modal_link" class="thumb" style="height:340px;" target="_blank" rel="noreferrer"><img id="modal_img" /></a>
+        </div>
+        <div>
+          <div class="hint">3×3 拼贴预览（仅 tiles.base）</div>
+          <canvas id="canvas_3x3" width="768" height="768" style="width:100%; border:1px solid #ddd; border-radius:10px; background:#777;"></canvas>
+          <div class="hint" id="qc_stats" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const MANIFEST_URL = '/assets/production/manifest.json';
     const BASE_URL = '/assets/production/';
@@ -56,6 +81,7 @@ const uiAssetsPageHTML = `<!doctype html>
     }
 
     let manifest = null;
+    let modalState = { cat: null, relPath: null };
 
     async function loadManifest(){
       setStatus('加载 manifest 中…');
@@ -63,6 +89,49 @@ const uiAssetsPageHTML = `<!doctype html>
       if (!resp.ok) throw new Error('manifest http ' + resp.status);
       manifest = await resp.json();
       setStatus('manifest 加载成功');
+    }
+
+    function draw3x3(img){
+      const c = el('canvas_3x3');
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0,0,c.width,c.height);
+      const sz = 256;
+      for (let y=0;y<3;y++){
+        for (let x=0;x<3;x++){
+          ctx.drawImage(img, x*sz, y*sz, sz, sz);
+        }
+      }
+    }
+
+    function closeModal(){
+      el('asset_modal').style.display = 'none';
+    }
+
+    function openModal(cat, relPath){
+      modalState = { cat, relPath };
+      const url = BASE_URL + relPath;
+      el('asset_modal').style.display = 'block';
+      el('modal_title').textContent = relPath;
+      el('modal_meta').textContent = '分类：' + cat;
+      el('modal_link').href = url;
+      el('qc_stats').textContent = '加载中…';
+
+      const img = el('modal_img');
+      img.onload = () => {
+        if (cat === 'tiles.base') {
+          draw3x3(img);
+          el('qc_stats').textContent = '已生成 3×3 拼贴预览（用于观察接缝与重复感）';
+        } else {
+          const c = el('canvas_3x3');
+          const ctx = c.getContext('2d');
+          ctx.clearRect(0,0,c.width,c.height);
+          el('qc_stats').textContent = '该分类不做 3×3 拼贴预览';
+        }
+      };
+      img.onerror = () => {
+        el('qc_stats').textContent = '图片加载失败';
+      };
+      img.src = url;
     }
 
     function getCategoryList(cat){
@@ -86,6 +155,12 @@ const uiAssetsPageHTML = `<!doctype html>
         const url = BASE_URL + relPath;
         const card = document.createElement('div');
         card.className = 'card';
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', (e) => {
+          if (e.metaKey || e.ctrlKey) return;
+          if (e.target && e.target.closest && e.target.closest('a')) return;
+          openModal(cat, relPath);
+        });
 
         const thumb = document.createElement('a');
         thumb.className = 'thumb';
@@ -120,6 +195,10 @@ const uiAssetsPageHTML = `<!doctype html>
         render();
         el('cat').addEventListener('change', render);
         el('q').addEventListener('input', render);
+        el('modal_close').addEventListener('click', closeModal);
+        el('asset_modal').addEventListener('click', (e) => {
+          if (e.target === el('asset_modal')) closeModal();
+        });
       } catch (e) {
         setStatus('加载失败：' + (e && e.message ? e.message : e));
       }
