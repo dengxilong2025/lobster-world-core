@@ -56,14 +56,42 @@ func TestSpectatorHome_IncludesWorldStageAndSummary(t *testing.T) {
 	}
 	// New behavior: summary should reflect recent events (intent/shock/evolution).
 	var containsHint bool
+	var containsHook bool
+	var orderCheck []string
 	for _, it := range world["summary"].([]any) {
 		s, _ := it.(string)
+		orderCheck = append(orderCheck, s)
 		if strings.Contains(s, "近期") || strings.Contains(s, "刚刚") {
 			containsHint = true
-			break
+		}
+		if strings.HasPrefix(s, "看点：") {
+			containsHook = true
 		}
 	}
 	if !containsHint {
 		t.Fatalf("expected world.summary contains recent-events hint, got %#v", world["summary"])
+	}
+	if !containsHook {
+		t.Fatalf("expected world.summary contains a hook line starting with 看点：, got %#v", world["summary"])
+	}
+
+	// Summary order should be stable for clients:
+	// 阶段 -> 近期 -> 看点 -> 风险(0..n) -> 建议(0..1)
+	pos := func(prefix string) int {
+		for i, s := range orderCheck {
+			if strings.HasPrefix(s, prefix) {
+				return i
+			}
+		}
+		return -1
+	}
+	pStage := pos("阶段：")
+	pRecent := pos("近期：")
+	pHook := pos("看点：")
+	if pStage < 0 || pRecent < 0 || pHook < 0 {
+		t.Fatalf("expected stage/recent/hook lines exist, got %#v", orderCheck)
+	}
+	if !(pStage < pRecent && pRecent < pHook) {
+		t.Fatalf("expected stable order stage<recent<hook, got %#v", orderCheck)
 	}
 }

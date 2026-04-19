@@ -1,0 +1,11 @@
+services:
+  lobster-world-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - PORT=8080
+      # Optional: shock scheduler toggle (see docs and gateway.ShockConfigFromEnv)
+      # - LW_SHOCK_ENABLED=1
+    ports:
+      - "8080:8080"
