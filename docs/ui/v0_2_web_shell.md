@@ -64,6 +64,36 @@ http://localhost:8080/ui
 
 ---
 
+## 4.5) 可脚本化“直达链接”（给智能体/自动化）
+
+`/ui` 支持 URL 参数，便于你直接把一个“可复现的测试入口链接”发给任何智能体：
+
+### 参数说明
+- `world_id`：必填，世界 ID
+- `goal`：可选，预填 goal 输入框
+- `autoconnect`：可选，`1` 或 `true` 时页面加载后会自动连接 SSE 并拉取 spectator/home
+
+### 示例
+1) 只预填 world_id：
+```
+http://localhost:8080/ui?world_id=w1
+```
+
+2) 预填 world_id + goal：
+```
+http://localhost:8080/ui?world_id=w1&goal=%E5%8E%BB%E7%8B%A9%E7%8C%8E%E8%8E%B7%E5%8F%96%E9%A3%9F%E7%89%A9
+```
+
+3) 自动连接（推荐给智能体批量测试）：
+```
+http://localhost:8080/ui?world_id=w1&autoconnect=1
+```
+
+4) 自动连接 + 预填 goal（最方便复现）：
+```
+http://localhost:8080/ui?world_id=w1&goal=%E5%8E%BB%E7%8B%A9%E7%8C%8E%E8%8E%B7%E5%8F%96%E9%A3%9F%E7%89%A9&autoconnect=1
+```
+
 ## 5) 智能体测试路径（HTTP 版本，不依赖浏览器）
 
 > 适合“20 个龙虾智能体”做压测/回归/体验统计。
@@ -124,4 +154,3 @@ SSE 断线后浏览器会自动重连；页面会显示提示文字。
 ### Q3：replays 不出现？
 replays 是从 SSE event JSON 里解析 `event_id` 生成的。  
 如果 SSE 输出不是 JSON 或缺少 `event_id`，说明后端事件格式有问题（应属于 P0 bug）。
-
