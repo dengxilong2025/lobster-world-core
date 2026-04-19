@@ -62,6 +62,7 @@ func NewHandler(opts Options) http.Handler {
 	registerAdoptionRoutes(mux, a, ad, es, hub)
 	registerSpectatorRoutes(mux, sp, sm)
 	registerReplayRoutes(mux, es, sp, sm)
+	registerUIRoutes(mux)
 
 	return mux
 }
