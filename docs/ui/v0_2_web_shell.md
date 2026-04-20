@@ -128,12 +128,12 @@ curl -sS -X POST "http://localhost:8080/api/v0/intents" \
 ```
 
 ### Step B：订阅事件流（SSE）
-`GET /api/v0/events?world_id=w1`
+`GET /api/v0/events/stream?world_id=w1`
 
 用 curl 观察（会持续输出）：
 
 ```bash
-curl -N "http://localhost:8080/api/v0/events?world_id=w1"
+curl -N "http://localhost:8080/api/v0/events/stream?world_id=w1"
 ```
 
 从输出中解析 `event_id`（通常在 JSON 里）。

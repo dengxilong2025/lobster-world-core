@@ -40,7 +40,7 @@ func TestUI_ServesHTML(t *testing.T) {
 		}
 		t.Fatalf("expected #world_id input, got body head: %q", head)
 	}
-	if !strings.Contains(body, "/api/v0/intents") || !strings.Contains(body, "/api/v0/events") {
+	if !strings.Contains(body, "/api/v0/intents") || !strings.Contains(body, "/api/v0/events/stream") {
 		t.Fatalf("expected page references v0 api endpoints")
 	}
 	// Ensure key DOM ids exist for agentic testers.

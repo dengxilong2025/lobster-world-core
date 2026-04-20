@@ -50,7 +50,7 @@ const uiPageHTML = `<!doctype html>
     <script>
       // Endpoints (keep as literal strings for tests)
       const API_INTENTS = '/api/v0/intents';
-      const API_EVENTS  = '/api/v0/events';
+      const API_EVENTS_STREAM = '/api/v0/events/stream';
       const API_HOME    = '/api/v0/spectator/home';
       const API_HIGHLIGHT = '/api/v0/replay/highlight';
       const API_EXPORT = '/api/v0/replay/export';
@@ -113,7 +113,7 @@ const uiPageHTML = `<!doctype html>
 
       function connectSSE(worldId) {
         if (es) { es.close(); es = null; }
-        const url = API_EVENTS + '?world_id=' + encodeURIComponent(worldId);
+        const url = API_EVENTS_STREAM + '?world_id=' + encodeURIComponent(worldId);
         es = new EventSource(url);
 
         es.onopen = () => setStatus('SSE 已连接');

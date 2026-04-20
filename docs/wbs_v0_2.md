@@ -25,7 +25,7 @@
 |---|---|---|---|---|
 | UI-01 | `/ui` 单页路由 | `GET /ui` 返回 HTML，包含稳定 DOM id | DONE | `internal/gateway/routes_ui.go` |
 | UI-02 | `/ui` 提交意图 | fetch `/api/v0/intents` 可用；错误可见 | DONE | `internal/gateway/ui_page.go` |
-| UI-03 | `/ui` SSE 事件流 | EventSource `/api/v0/events?world_id=...` 可见 | DONE | 同上 |
+| UI-03 | `/ui` SSE 事件流 | EventSource `/api/v0/events/stream?world_id=...` 可见 | DONE | 同上 |
 | UI-04 | `/ui` 观战摘要 | 渲染 `/api/v0/spectator/home` 的 stage/summary | DONE | 同上 |
 | UI-05 | `/ui` 回放入口 | 从 SSE 解析 event_id 生成 replay/highlight 链接 | DONE | 同上 |
 | UI-06 | `/ui` 可脚本化 | 支持 `?world_id=...&goal=...&autoconnect=1` | DONE | 便于智能体批测 |
