@@ -49,6 +49,8 @@ const uiAssetsPageHTML = `<!doctype html>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button id="btn_qa_run" style="padding:6px 10px;">重新扫描</button>
         <button id="btn_qa_copy" style="padding:6px 10px;">复制可疑清单</button>
+        <button id="btn_qa_copy_xiaowen" style="padding:6px 10px;">复制反馈清单（给小文）</button>
+        <button id="btn_qa_export_suspicious" style="padding:6px 10px;">批量导出可疑项3×3</button>
         <button id="btn_qa_download" style="padding:6px 10px;">下载JSON</button>
         <button id="btn_qa_close" style="padding:6px 10px;">返回浏览</button>
       </div>
@@ -258,6 +260,122 @@ const uiAssetsPageHTML = `<!doctype html>
       } catch {
         el('qa_results').textContent = text + '\\n\\n（请手动复制）\\n\\n' + el('qa_results').textContent;
       }
+    }
+
+    async function copyQAXiaowen(){
+      const arr = qaLast.suspicious || [];
+      const baseUrl = window.location.origin;
+      const lines = [];
+      lines.push('【P2反馈清单 / tiles.base】可疑项（alpha透明占比>5%）共 ' + arr.length + ' 条：');
+      lines.push('（每条包含：文件名 | alpha0% | seam参考 | 复现链接）');
+      lines.push('');
+      if (!arr.length) {
+        lines.push('（无可疑项）');
+      } else {
+        for (const it of arr) {
+          const file = (it.relPath || '').split('/').pop();
+          const ui = baseUrl + '/ui/assets?cat=' + encodeURIComponent('tiles.base') + '&q=' + encodeURIComponent(file);
+          lines.push('- ' + it.relPath + ' | alpha0=' + fmtPct(it.alpha.rz) + ' | seam=' + fmtScore(it.seam) + ' | ' + ui);
+        }
+      }
+      lines.push('');
+      lines.push('备注：seam 为接缝启发式参考值；重点先看 alpha0%（疑似误透明/通道异常）。');
+
+      const text = lines.join('\\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        setQAStatus('已复制给小文的反馈清单（' + arr.length + '条）');
+      } catch {
+        el('qa_results').textContent = text + '\\n\\n（请手动复制）\\n\\n' + el('qa_results').textContent;
+      }
+    }
+
+    function exportCanvasPng(canvas, filename){
+      return new Promise((resolve) => {
+        if (canvas.toBlob) {
+          canvas.toBlob((blob) => {
+            if (!blob) return resolve(false);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            resolve(true);
+          }, 'image/png');
+        } else {
+          const url = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          resolve(true);
+        }
+      });
+    }
+
+    async function exportQASuspicious3x3(){
+      const arr = qaLast.suspicious || [];
+      if (!arr.length) {
+        setQAStatus('无可疑项可导出');
+        return;
+      }
+
+      // Export using an offscreen 768x768 canvas.
+      const c = document.createElement('canvas');
+      c.width = 768;
+      c.height = 768;
+      const ctx = c.getContext('2d');
+
+      const stamp = tsNow();
+      setQAStatus('导出中：0 / ' + arr.length + '（若浏览器提示多文件下载，请点击允许）');
+
+      for (let i=0;i<arr.length;i++){
+        const it = arr[i];
+        const relPath = it.relPath;
+        const url = BASE_URL + relPath;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+          img.src = url;
+        });
+        if (!img.naturalWidth) {
+          setQAStatus('导出中（加载失败）：' + (i+1) + ' / ' + arr.length);
+          continue;
+        }
+
+        // draw 3x3
+        ctx.clearRect(0,0,c.width,c.height);
+        const sz = 256;
+        for (let y=0;y<3;y++){
+          for (let x=0;x<3;x++){
+            ctx.drawImage(img, x*sz, y*sz, sz, sz);
+          }
+        }
+
+        const base = (relPath || '').split('/').pop().replace(/\\.png$/i,'');
+        const filename = base + '__3x3__QA__' + stamp + '.png';
+        await exportCanvasPng(c, filename);
+
+        // Add to export log for traceability.
+        const entry = { ts: tsNow(), cat: 'tiles.base', relPath, filename };
+        exportLog.unshift(entry);
+        if (exportLog.length > EXPORT_LOG_MAX) exportLog = exportLog.slice(0, EXPORT_LOG_MAX);
+        saveExportLog();
+
+        setQAStatus('导出中：' + (i+1) + ' / ' + arr.length);
+        // small delay so the browser can process downloads smoothly
+        await new Promise(r => setTimeout(r, 120));
+      }
+
+      setQAStatus('导出完成：' + arr.length + ' 张');
     }
 
     function downloadQAJson(){
@@ -618,6 +736,8 @@ const uiAssetsPageHTML = `<!doctype html>
         el('btn_qa_close').addEventListener('click', hideQA);
         el('btn_qa_run').addEventListener('click', runQA);
         el('btn_qa_copy').addEventListener('click', copyQASuspicious);
+        el('btn_qa_copy_xiaowen').addEventListener('click', copyQAXiaowen);
+        el('btn_qa_export_suspicious').addEventListener('click', exportQASuspicious3x3);
         el('btn_qa_download').addEventListener('click', downloadQAJson);
         el('modal_close').addEventListener('click', closeModal);
         el('btn_export_3x3').addEventListener('click', export3x3Png);
