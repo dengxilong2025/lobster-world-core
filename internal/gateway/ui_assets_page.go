@@ -176,6 +176,18 @@ const uiAssetsPageHTML = `<!doctype html>
       saveExportLog();
     }
 
+    function pad2(n){ return String(n).padStart(2, '0'); }
+    function tsNow(){
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = pad2(d.getMonth()+1);
+      const day = pad2(d.getDate());
+      const hh = pad2(d.getHours());
+      const mm = pad2(d.getMinutes());
+      const ss = pad2(d.getSeconds());
+      return '' + y + m + day + '-' + hh + mm + ss;
+    }
+
     async function loadManifest(){
       setStatus('加载 manifest 中…');
       const resp = await fetch(MANIFEST_URL, { cache: 'no-store' });
@@ -381,9 +393,12 @@ const uiAssetsPageHTML = `<!doctype html>
         el('q').addEventListener('input', render);
         el('modal_close').addEventListener('click', closeModal);
         el('btn_export_3x3').addEventListener('click', export3x3Png);
+<<<<<<< HEAD
         el('btn_log_copy').addEventListener('click', copyExportLog);
         el('btn_log_download').addEventListener('click', downloadExportLogJson);
         el('btn_log_clear').addEventListener('click', clearExportLog);
+=======
+>>>>>>> 812db99 (feat(ui): export 3x3 tiling png from asset modal)
         el('asset_modal').addEventListener('click', (e) => {
           if (e.target === el('asset_modal')) closeModal();
         });
