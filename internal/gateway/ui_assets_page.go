@@ -39,6 +39,20 @@ const uiAssetsPageHTML = `<!doctype html>
     <span class="hint">数据来自 <code>/assets/production/manifest.json</code></span>
   </header>
 
+  <details id="export_log_panel" style="margin-top:12px;" open>
+    <summary style="cursor:pointer; user-select:none;">导出留档（本地保存）</summary>
+    <div class="hint" style="margin-top:6px;">
+      每次“导出 3×3 PNG”成功后会自动记录一条。数据保存在浏览器本地（刷新不丢）。
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <button id="btn_log_copy" style="padding:6px 10px;">复制留档</button>
+      <button id="btn_log_download" style="padding:6px 10px;">下载JSON</button>
+      <button id="btn_log_clear" style="padding:6px 10px;">清空</button>
+      <span id="export_log_count" class="hint"></span>
+    </div>
+    <pre id="export_log_text" style="margin-top:8px; padding:10px; background:#f7f7f7; border:1px solid #ddd; border-radius:10px; max-height:220px; overflow:auto;"></pre>
+  </details>
+
   <div id="status" class="hint" style="margin-top:10px;"></div>
   <div id="grid" class="grid"></div>
 
@@ -71,6 +85,8 @@ const uiAssetsPageHTML = `<!doctype html>
   <script>
     const MANIFEST_URL = '/assets/production/manifest.json';
     const BASE_URL = '/assets/production/';
+    const EXPORT_LOG_KEY = 'lw_assets_export_log_v1';
+    const EXPORT_LOG_MAX = 200;
 
     function el(id){ return document.getElementById(id); }
     function setStatus(s){ el('status').textContent = s; }
@@ -85,6 +101,7 @@ const uiAssetsPageHTML = `<!doctype html>
 
     let manifest = null;
     let modalState = { cat: null, relPath: null };
+    let exportLog = [];
 
     function pad2(n){ return String(n).padStart(2, '0'); }
     function tsNow(){
@@ -96,6 +113,67 @@ const uiAssetsPageHTML = `<!doctype html>
       const mm = pad2(d.getMinutes());
       const ss = pad2(d.getSeconds());
       return '' + y + m + day + '-' + hh + mm + ss;
+    }
+
+    function safeJsonParse(s, fallback){
+      try { return JSON.parse(s); } catch { return fallback; }
+    }
+
+    function formatLogLines(items){
+      return items.map((it) => {
+        return it.ts + ' | ' + it.cat + ' | ' + it.relPath + ' | ' + it.filename;
+      }).join('\\n');
+    }
+
+    function renderExportLog(){
+      const count = exportLog.length;
+      el('export_log_count').textContent = count ? ('共 ' + count + ' 条') : '暂无留档';
+      el('export_log_text').textContent = count ? formatLogLines(exportLog) : '（空）';
+    }
+
+    function loadExportLog(){
+      const raw = localStorage.getItem(EXPORT_LOG_KEY);
+      const parsed = safeJsonParse(raw, []);
+      exportLog = Array.isArray(parsed) ? parsed : [];
+      renderExportLog();
+    }
+
+    function saveExportLog(){
+      localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(exportLog));
+      renderExportLog();
+    }
+
+    async function copyExportLog(){
+      const text = formatLogLines(exportLog);
+      try {
+        await navigator.clipboard.writeText(text);
+        el('export_log_count').textContent = '已复制（共 ' + exportLog.length + ' 条）';
+      } catch {
+        const pre = el('export_log_text');
+        const range = document.createRange();
+        range.selectNodeContents(pre);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        el('export_log_count').textContent = '请手动复制（已选中）';
+      }
+    }
+
+    function downloadExportLogJson(){
+      const blob = new Blob([JSON.stringify(exportLog, null, 2) + '\\n'], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'assets_export_log__' + tsNow() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    function clearExportLog(){
+      exportLog = [];
+      saveExportLog();
     }
 
     async function loadManifest(){
@@ -123,7 +201,8 @@ const uiAssetsPageHTML = `<!doctype html>
       const canvas = el('canvas_3x3');
       const rel = modalState.relPath;
       const base = rel.split('/').pop().replace(/\\.png$/i,'');
-      const filename = base + '__3x3__' + tsNow() + '.png';
+      const stamp = tsNow();
+      const filename = base + '__3x3__' + stamp + '.png';
 
       // Prefer toBlob (better memory); fall back to dataURL.
       if (canvas.toBlob) {
@@ -137,6 +216,10 @@ const uiAssetsPageHTML = `<!doctype html>
           a.click();
           a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+          exportLog.unshift({ ts: stamp, cat: modalState.cat, relPath: modalState.relPath, filename });
+          if (exportLog.length > EXPORT_LOG_MAX) exportLog = exportLog.slice(0, EXPORT_LOG_MAX);
+          saveExportLog();
         }, 'image/png');
       } else {
         const url = canvas.toDataURL('image/png');
@@ -146,6 +229,10 @@ const uiAssetsPageHTML = `<!doctype html>
         document.body.appendChild(a);
         a.click();
         a.remove();
+
+        exportLog.unshift({ ts: stamp, cat: modalState.cat, relPath: modalState.relPath, filename });
+        if (exportLog.length > EXPORT_LOG_MAX) exportLog = exportLog.slice(0, EXPORT_LOG_MAX);
+        saveExportLog();
       }
     }
 
@@ -288,11 +375,15 @@ const uiAssetsPageHTML = `<!doctype html>
     (async function main(){
       try {
         await loadManifest();
+        loadExportLog();
         render();
         el('cat').addEventListener('change', render);
         el('q').addEventListener('input', render);
         el('modal_close').addEventListener('click', closeModal);
         el('btn_export_3x3').addEventListener('click', export3x3Png);
+        el('btn_log_copy').addEventListener('click', copyExportLog);
+        el('btn_log_download').addEventListener('click', downloadExportLogJson);
+        el('btn_log_clear').addEventListener('click', clearExportLog);
         el('asset_modal').addEventListener('click', (e) => {
           if (e.target === el('asset_modal')) closeModal();
         });
