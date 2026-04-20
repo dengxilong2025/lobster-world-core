@@ -42,6 +42,9 @@ func TestUIAssets_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "id=\"canvas_3x3\"") {
 		t.Fatalf("expected assets page contains #canvas_3x3")
 	}
+	if !strings.Contains(body, "id=\"btn_export_3x3\"") {
+		t.Fatalf("expected assets page contains #btn_export_3x3")
+	}
 }
 
 func TestAssetManifest_Served(t *testing.T) {

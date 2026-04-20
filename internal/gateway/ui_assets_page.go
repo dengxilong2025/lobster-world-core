@@ -49,7 +49,10 @@ const uiAssetsPageHTML = `<!doctype html>
           <div id="modal_title" style="font-weight:600;"></div>
           <div id="modal_meta" class="hint"></div>
         </div>
-        <button id="modal_close" style="padding:6px 10px;">关闭</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="btn_export_3x3" style="padding:6px 10px;" disabled>导出 3×3 PNG</button>
+          <button id="modal_close" style="padding:6px 10px;">关闭</button>
+        </div>
       </div>
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
         <div>
@@ -83,6 +86,18 @@ const uiAssetsPageHTML = `<!doctype html>
     let manifest = null;
     let modalState = { cat: null, relPath: null };
 
+    function pad2(n){ return String(n).padStart(2, '0'); }
+    function tsNow(){
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = pad2(d.getMonth()+1);
+      const day = pad2(d.getDate());
+      const hh = pad2(d.getHours());
+      const mm = pad2(d.getMinutes());
+      const ss = pad2(d.getSeconds());
+      return '' + y + m + day + '-' + hh + mm + ss;
+    }
+
     async function loadManifest(){
       setStatus('加载 manifest 中…');
       const resp = await fetch(MANIFEST_URL, { cache: 'no-store' });
@@ -100,6 +115,37 @@ const uiAssetsPageHTML = `<!doctype html>
         for (let x=0;x<3;x++){
           ctx.drawImage(img, x*sz, y*sz, sz, sz);
         }
+      }
+    }
+
+    function export3x3Png(){
+      if (!modalState || modalState.cat !== 'tiles.base' || !modalState.relPath) return;
+      const canvas = el('canvas_3x3');
+      const rel = modalState.relPath;
+      const base = rel.split('/').pop().replace(/\\.png$/i,'');
+      const filename = base + '__3x3__' + tsNow() + '.png';
+
+      // Prefer toBlob (better memory); fall back to dataURL.
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }, 'image/png');
+      } else {
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
       }
     }
 
@@ -153,6 +199,9 @@ const uiAssetsPageHTML = `<!doctype html>
       el('modal_link').href = url;
       el('qc_stats').textContent = '加载中…';
 
+      const btn = el('btn_export_3x3');
+      btn.disabled = true; // enable after draw3x3 finished
+
       const img = el('modal_img');
       img.onload = () => {
         const st = computeAlphaStats(img, cat);
@@ -167,6 +216,7 @@ const uiAssetsPageHTML = `<!doctype html>
 
         if (cat === 'tiles.base') {
           draw3x3(img);
+          btn.disabled = false;
         } else {
           const c = el('canvas_3x3');
           const ctx = c.getContext('2d');
@@ -242,6 +292,7 @@ const uiAssetsPageHTML = `<!doctype html>
         el('cat').addEventListener('change', render);
         el('q').addEventListener('input', render);
         el('modal_close').addEventListener('click', closeModal);
+        el('btn_export_3x3').addEventListener('click', export3x3Png);
         el('asset_modal').addEventListener('click', (e) => {
           if (e.target === el('asset_modal')) closeModal();
         });
