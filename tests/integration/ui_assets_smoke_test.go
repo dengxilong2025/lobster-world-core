@@ -51,6 +51,9 @@ func TestUIAssets_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "id=\"btn_copy_qc\"") {
 		t.Fatalf("expected assets page contains #btn_copy_qc")
 	}
+	if !strings.Contains(body, "id=\"btn_qa\"") {
+		t.Fatalf("expected assets page contains #btn_qa")
+	}
 }
 
 func TestAssetManifest_Served(t *testing.T) {
