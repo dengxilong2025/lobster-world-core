@@ -65,6 +65,7 @@ const uiAssetsPageHTML = `<!doctype html>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <button id="btn_export_3x3" style="padding:6px 10px;" disabled>导出 3×3 PNG</button>
+          <button id="btn_copy_qc" style="padding:6px 10px;" disabled>复制验收信息</button>
           <button id="modal_close" style="padding:6px 10px;">关闭</button>
         </div>
       </div>
@@ -100,8 +101,9 @@ const uiAssetsPageHTML = `<!doctype html>
     }
 
     let manifest = null;
-    let modalState = { cat: null, relPath: null };
+    let modalState = { cat: null, relPath: null, alpha: null, lastExport: null };
     let exportLog = [];
+    let lastExportStamp = '';
 
     function pad2(n){ return String(n).padStart(2, '0'); }
     function tsNow(){
@@ -121,7 +123,8 @@ const uiAssetsPageHTML = `<!doctype html>
 
     function formatLogLines(items){
       return items.map((it) => {
-        return it.ts + ' | ' + it.cat + ' | ' + it.relPath + ' | ' + it.filename;
+        const mark = (it.ts && it.ts === lastExportStamp) ? '★ ' : '';
+        return mark + it.ts + ' | ' + it.cat + ' | ' + it.relPath + ' | ' + it.filename;
       }).join('\\n');
     }
 
@@ -217,9 +220,14 @@ const uiAssetsPageHTML = `<!doctype html>
           a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 2000);
 
-          exportLog.unshift({ ts: stamp, cat: modalState.cat, relPath: modalState.relPath, filename });
+          const entry = { ts: stamp, cat: modalState.cat, relPath: modalState.relPath, filename };
+          exportLog.unshift(entry);
           if (exportLog.length > EXPORT_LOG_MAX) exportLog = exportLog.slice(0, EXPORT_LOG_MAX);
           saveExportLog();
+          modalState.lastExport = entry;
+          lastExportStamp = stamp;
+          // transient highlight for 10s
+          setTimeout(() => { if (lastExportStamp === stamp) { lastExportStamp = ''; renderExportLog(); } }, 10000);
         }, 'image/png');
       } else {
         const url = canvas.toDataURL('image/png');
@@ -230,9 +238,13 @@ const uiAssetsPageHTML = `<!doctype html>
         a.click();
         a.remove();
 
-        exportLog.unshift({ ts: stamp, cat: modalState.cat, relPath: modalState.relPath, filename });
+        const entry = { ts: stamp, cat: modalState.cat, relPath: modalState.relPath, filename };
+        exportLog.unshift(entry);
         if (exportLog.length > EXPORT_LOG_MAX) exportLog = exportLog.slice(0, EXPORT_LOG_MAX);
         saveExportLog();
+        modalState.lastExport = entry;
+        lastExportStamp = stamp;
+        setTimeout(() => { if (lastExportStamp === stamp) { lastExportStamp = ''; renderExportLog(); } }, 10000);
       }
     }
 
@@ -273,12 +285,48 @@ const uiAssetsPageHTML = `<!doctype html>
       return { w, h, rz, rm, rf, warn };
     }
 
+    function fmtPct(x){
+      return (Math.round(x * 1000) / 10) + '%'; // 0.1%
+    }
+
+    async function copyCurrentQC(){
+      if (!modalState || !modalState.relPath) return;
+      const a = modalState.alpha;
+      const baseUrl = window.location.origin;
+      const imgUrl = baseUrl + BASE_URL + modalState.relPath;
+      const pageUrl = baseUrl + window.location.pathname + '?cat=' + encodeURIComponent(modalState.cat || '') + '&q=' + encodeURIComponent((modalState.relPath || '').split('/').pop());
+
+      let msg = '[LW QC] ' + modalState.relPath + ' | cat=' + (modalState.cat || '');
+      if (a) {
+        msg += ' | alpha(透明/半透明/不透明)=' + fmtPct(a.rz) + '/' + fmtPct(a.rm) + '/' + fmtPct(a.rf);
+        if (a.warn) msg += ' | WARN=' + a.warn;
+      }
+      if (modalState.lastExport) {
+        msg += ' | exported=' + modalState.lastExport.filename + ' | ts=' + modalState.lastExport.ts;
+      }
+      msg += '\\n' + 'img: ' + imgUrl + '\\n' + 'ui: ' + pageUrl;
+
+      try {
+        await navigator.clipboard.writeText(msg);
+        el('qc_stats').textContent = (el('qc_stats').textContent || '') + '（验收信息已复制）';
+      } catch {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = msg;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        el('qc_stats').textContent = (el('qc_stats').textContent || '') + '（验收信息已复制）';
+      }
+    }
+
     function closeModal(){
       el('asset_modal').style.display = 'none';
     }
 
     function openModal(cat, relPath){
-      modalState = { cat, relPath };
+      modalState = { cat, relPath, alpha: null, lastExport: null };
       const url = BASE_URL + relPath;
       el('asset_modal').style.display = 'block';
       el('modal_title').textContent = relPath;
@@ -288,13 +336,15 @@ const uiAssetsPageHTML = `<!doctype html>
 
       const btn = el('btn_export_3x3');
       btn.disabled = true; // enable after draw3x3 finished
+      const btnCopy = el('btn_copy_qc');
+      btnCopy.disabled = true;
 
       const img = el('modal_img');
       img.onload = () => {
         const st = computeAlphaStats(img, cat);
+        modalState.alpha = st;
         if (st) {
-          const pct = (x) => Math.round(x * 1000) / 10; // 0.1%
-          let msg = 'alpha 统计：透明 ' + pct(st.rz) + '%，半透明 ' + pct(st.rm) + '%，不透明 ' + pct(st.rf) + '%';
+          let msg = 'alpha 统计：透明 ' + fmtPct(st.rz) + '，半透明 ' + fmtPct(st.rm) + '，不透明 ' + fmtPct(st.rf);
           if (st.warn) msg += '；' + st.warn;
           el('qc_stats').textContent = msg;
         } else {
@@ -310,6 +360,7 @@ const uiAssetsPageHTML = `<!doctype html>
           ctx.clearRect(0,0,c.width,c.height);
           // keep qc_stats (alpha message). Just avoid implying 3×3 is available.
         }
+        btnCopy.disabled = false;
       };
       img.onerror = () => {
         el('qc_stats').textContent = '图片加载失败';
@@ -333,6 +384,15 @@ const uiAssetsPageHTML = `<!doctype html>
       const grid = el('grid');
       grid.innerHTML = '';
       setStatus('分类 ' + cat + '：' + list.length + ' 项');
+
+      // keep URL in sync for shareable links
+      try {
+        const sp = new URLSearchParams();
+        sp.set('cat', cat);
+        if (q) sp.set('q', q);
+        const url = window.location.pathname + '?' + sp.toString();
+        window.history.replaceState({}, '', url);
+      } catch {}
 
       for (const relPath of list) {
         const url = BASE_URL + relPath;
@@ -376,11 +436,18 @@ const uiAssetsPageHTML = `<!doctype html>
       try {
         await loadManifest();
         loadExportLog();
+        // Support shareable links: /ui/assets?cat=...&q=...
+        const sp = new URLSearchParams(window.location.search);
+        const cat = sp.get('cat');
+        const q = sp.get('q');
+        if (cat) el('cat').value = cat;
+        if (q) el('q').value = q;
         render();
         el('cat').addEventListener('change', render);
         el('q').addEventListener('input', render);
         el('modal_close').addEventListener('click', closeModal);
         el('btn_export_3x3').addEventListener('click', export3x3Png);
+        el('btn_copy_qc').addEventListener('click', copyCurrentQC);
         el('btn_log_copy').addEventListener('click', copyExportLog);
         el('btn_log_download').addEventListener('click', downloadExportLogJson);
         el('btn_log_clear').addEventListener('click', clearExportLog);
