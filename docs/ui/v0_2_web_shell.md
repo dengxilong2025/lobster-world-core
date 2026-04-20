@@ -46,6 +46,12 @@ docker compose up --build
 http://localhost:8080/ui
 ```
 
+同时建议检查静态资源是否可用（用于验收与演示稳定性）：
+```bash
+curl -sS -I "http://localhost:8080/ui/assets" | head -n 1
+curl -sS -I "http://localhost:8080/assets/production/manifest.json" | head -n 1
+```
+
 停止：
 ```bash
 docker compose down

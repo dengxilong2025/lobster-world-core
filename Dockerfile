@@ -21,6 +21,7 @@ EXPOSE 8080
 
 WORKDIR /
 COPY --from=builder /out/server /server
+# Include production assets for /ui/assets and static preview endpoints.
+COPY --from=builder /src/assets/production /assets/production
 USER nonroot:nonroot
 CMD ["/server"]
-
