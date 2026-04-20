@@ -54,6 +54,12 @@ func TestUIAssets_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "id=\"btn_qa\"") {
 		t.Fatalf("expected assets page contains #btn_qa")
 	}
+	if !strings.Contains(body, "id=\"btn_qa_export_suspicious\"") {
+		t.Fatalf("expected assets page contains #btn_qa_export_suspicious")
+	}
+	if !strings.Contains(body, "id=\"btn_qa_copy_xiaowen\"") {
+		t.Fatalf("expected assets page contains #btn_qa_copy_xiaowen")
+	}
 }
 
 func TestAssetManifest_Served(t *testing.T) {
