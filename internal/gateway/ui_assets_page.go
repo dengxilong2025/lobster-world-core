@@ -36,8 +36,28 @@ const uiAssetsPageHTML = `<!doctype html>
       </select>
     </label>
     <label>搜索：<input id="q" placeholder="输入文件名片段…" size="26"/></label>
+    <button id="btn_qa" style="padding:6px 10px;">QA报告</button>
     <span class="hint">数据来自 <code>/assets/production/manifest.json</code></span>
   </header>
+
+  <div id="qa_panel" style="display:none; margin-top:12px; border:1px solid #ddd; border-radius:12px; padding:12px; background:#fff;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:600;">QA 报告（tiles.base）</div>
+        <div id="qa_status" class="hint"></div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="btn_qa_run" style="padding:6px 10px;">重新扫描</button>
+        <button id="btn_qa_copy" style="padding:6px 10px;">复制可疑清单</button>
+        <button id="btn_qa_download" style="padding:6px 10px;">下载JSON</button>
+        <button id="btn_qa_close" style="padding:6px 10px;">返回浏览</button>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:10px;">
+      规则（启发式）：对每个 tiles.base 瓦片统计 alpha 覆盖率；若透明占比 &gt; 5% 则标记为“疑似误抠/通道异常”。同时计算简单接缝分数（边缘RGB差异均值）供参考。
+    </div>
+    <pre id="qa_results" style="margin-top:10px; padding:10px; background:#f7f7f7; border:1px solid #ddd; border-radius:10px; max-height:360px; overflow:auto;"></pre>
+  </div>
 
   <details id="export_log_panel" style="margin-top:12px;" open>
     <summary style="cursor:pointer; user-select:none;">导出留档（本地保存）</summary>
@@ -88,6 +108,7 @@ const uiAssetsPageHTML = `<!doctype html>
     const BASE_URL = '/assets/production/';
     const EXPORT_LOG_KEY = 'lw_assets_export_log_v1';
     const EXPORT_LOG_MAX = 200;
+    const QA_KEY = 'lw_assets_qa_v1';
 
     function el(id){ return document.getElementById(id); }
     function setStatus(s){ el('status').textContent = s; }
@@ -104,6 +125,7 @@ const uiAssetsPageHTML = `<!doctype html>
     let modalState = { cat: null, relPath: null, alpha: null, lastExport: null };
     let exportLog = [];
     let lastExportStamp = '';
+    let qaLast = { ts: '', items: [], suspicious: [] };
 
     function pad2(n){ return String(n).padStart(2, '0'); }
     function tsNow(){
@@ -177,6 +199,153 @@ const uiAssetsPageHTML = `<!doctype html>
     function clearExportLog(){
       exportLog = [];
       saveExportLog();
+    }
+
+    function setQAStatus(s){
+      el('qa_status').textContent = s;
+    }
+
+    function fmtScore(x){
+      return (Math.round(x * 100) / 100).toFixed(2);
+    }
+
+    function loadQA(){
+      const raw = localStorage.getItem(QA_KEY);
+      const parsed = safeJsonParse(raw, null);
+      if (parsed && Array.isArray(parsed.items)) {
+        qaLast = parsed;
+      }
+      renderQA();
+    }
+
+    function saveQA(){
+      localStorage.setItem(QA_KEY, JSON.stringify(qaLast));
+      renderQA();
+    }
+
+    function renderQA(){
+      const ts = qaLast.ts ? ('上次扫描：' + qaLast.ts) : '尚未扫描';
+      const n = qaLast.items ? qaLast.items.length : 0;
+      const k = qaLast.suspicious ? qaLast.suspicious.length : 0;
+      setQAStatus(ts + '；总数 ' + n + '；可疑 ' + k);
+
+      if (!qaLast.items || !qaLast.items.length) {
+        el('qa_results').textContent = '（空）';
+        return;
+      }
+
+      const lines = [];
+      lines.push('SUSPICIOUS (alpha透明占比>5%): ' + k);
+      for (const it of (qaLast.suspicious || [])) {
+        lines.push('⚠ ' + it.relPath + ' | alpha0=' + fmtPct(it.alpha.rz) + ' | seam=' + fmtScore(it.seam));
+      }
+      lines.push('');
+      lines.push('ALL:');
+      for (const it of qaLast.items) {
+        lines.push('- ' + it.relPath + ' | alpha0=' + fmtPct(it.alpha.rz) + ' | alphaMid=' + fmtPct(it.alpha.rm) + ' | alphaFull=' + fmtPct(it.alpha.rf) + ' | seam=' + fmtScore(it.seam));
+      }
+      el('qa_results').textContent = lines.join('\\n');
+    }
+
+    async function copyQASuspicious(){
+      const arr = qaLast.suspicious || [];
+      const text = arr.length
+        ? arr.map(it => it.relPath + ' | alpha0=' + fmtPct(it.alpha.rz) + ' | seam=' + fmtScore(it.seam)).join('\\n')
+        : '（无可疑项）';
+      try {
+        await navigator.clipboard.writeText(text);
+        setQAStatus('已复制可疑清单（' + arr.length + '条）');
+      } catch {
+        el('qa_results').textContent = text + '\\n\\n（请手动复制）\\n\\n' + el('qa_results').textContent;
+      }
+    }
+
+    function downloadQAJson(){
+      const blob = new Blob([JSON.stringify(qaLast, null, 2) + '\\n'], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'assets_qa_tiles_base__' + tsNow() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    function computeSeamScoreRGB(img){
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      const oc = document.createElement('canvas');
+      oc.width = w;
+      oc.height = h;
+      const ctx = oc.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+
+      function rgbAt(x, y){
+        const i = (y * w + x) * 4;
+        return [data[i], data[i+1], data[i+2]];
+      }
+
+      let sTB = 0, sLR = 0;
+      for (let x=0;x<w;x++){
+        const t = rgbAt(x,0), b = rgbAt(x,h-1);
+        sTB += Math.abs(t[0]-b[0]) + Math.abs(t[1]-b[1]) + Math.abs(t[2]-b[2]);
+      }
+      for (let y=0;y<h;y++){
+        const l = rgbAt(0,y), r = rgbAt(w-1,y);
+        sLR += Math.abs(l[0]-r[0]) + Math.abs(l[1]-r[1]) + Math.abs(l[2]-r[2]);
+      }
+      sTB /= (w * 3);
+      sLR /= (h * 3);
+      return (sTB + sLR) / 2;
+    }
+
+    function showQA(){
+      el('qa_panel').style.display = 'block';
+      el('export_log_panel').style.display = 'none';
+      el('grid').style.display = 'none';
+      setStatus('');
+      loadQA();
+    }
+
+    function hideQA(){
+      el('qa_panel').style.display = 'none';
+      el('export_log_panel').style.display = '';
+      el('grid').style.display = '';
+      render();
+    }
+
+    async function runQA(){
+      const list = getCategoryList('tiles.base');
+      qaLast = { ts: tsNow(), items: [], suspicious: [] };
+      setQAStatus('扫描中：0 / ' + list.length);
+
+      for (let i=0;i<list.length;i++){
+        const relPath = list[i];
+        const url = BASE_URL + relPath;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+          img.src = url;
+        });
+        if (!img.naturalWidth) {
+          setQAStatus('扫描中（加载失败）：' + (i+1) + ' / ' + list.length);
+          continue;
+        }
+        const alpha = computeAlphaStats(img, 'tiles.base') || { rz: 0, rm: 0, rf: 1, warn: '' };
+        const seam = computeSeamScoreRGB(img);
+        const item = { relPath, alpha: { rz: alpha.rz, rm: alpha.rm, rf: alpha.rf, warn: alpha.warn }, seam };
+        qaLast.items.push(item);
+        if (alpha.rz > 0.05) qaLast.suspicious.push(item);
+        setQAStatus('扫描中：' + (i+1) + ' / ' + list.length);
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      saveQA();
+      setQAStatus('完成：总数 ' + qaLast.items.length + '；可疑 ' + qaLast.suspicious.length);
     }
 
     async function loadManifest(){
@@ -445,6 +614,11 @@ const uiAssetsPageHTML = `<!doctype html>
         render();
         el('cat').addEventListener('change', render);
         el('q').addEventListener('input', render);
+        el('btn_qa').addEventListener('click', showQA);
+        el('btn_qa_close').addEventListener('click', hideQA);
+        el('btn_qa_run').addEventListener('click', runQA);
+        el('btn_qa_copy').addEventListener('click', copyQASuspicious);
+        el('btn_qa_download').addEventListener('click', downloadQAJson);
         el('modal_close').addEventListener('click', closeModal);
         el('btn_export_3x3').addEventListener('click', export3x3Png);
         el('btn_copy_qc').addEventListener('click', copyCurrentQC);
