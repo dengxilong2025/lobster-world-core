@@ -60,18 +60,29 @@ func (l *ipRateLimiter) get(ip string) *rate.Limiter {
 }
 
 func clientIP(r *http.Request) string {
-	// Trust X-Forwarded-For if present (common behind reverse proxies).
-	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
-		parts := strings.Split(xff, ",")
-		if len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
+	remote := strings.TrimSpace(r.RemoteAddr)
+
+	// Derive remote host (best-effort).
+	host := remote
+	if h, _, err := net.SplitHostPort(remote); err == nil && h != "" {
+		host = h
+	}
+
+	// Trust X-Forwarded-For ONLY when we are behind a controlled reverse proxy.
+	// MVP rule: treat loopback as "trusted proxy" (typical local dev / compose setups).
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+			parts := strings.Split(xff, ",")
+			if len(parts) > 0 {
+				return strings.TrimSpace(parts[0])
+			}
 		}
 	}
-	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
-	if err == nil && host != "" {
+
+	if host != "" {
 		return host
 	}
-	return strings.TrimSpace(r.RemoteAddr)
+	return remote
 }
 
 func rateLimit(l *ipRateLimiter, next http.Handler) http.Handler {

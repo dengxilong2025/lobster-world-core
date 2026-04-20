@@ -43,3 +43,20 @@ func TestAuthEndpoints_AreRateLimitedByIP(t *testing.T) {
 	}
 }
 
+func TestClientIP_TrustsXFFOnlyFromLoopbackProxy(t *testing.T) {
+	t.Parallel()
+
+	r1 := httptest.NewRequest(http.MethodGet, "http://example/", nil)
+	r1.RemoteAddr = "203.0.113.9:1234"
+	r1.Header.Set("X-Forwarded-For", "1.2.3.4")
+	if got := clientIP(r1); got != "203.0.113.9" {
+		t.Fatalf("expected remote ip, got %q", got)
+	}
+
+	r2 := httptest.NewRequest(http.MethodGet, "http://example/", nil)
+	r2.RemoteAddr = "127.0.0.1:1234"
+	r2.Header.Set("X-Forwarded-For", "1.2.3.4, 127.0.0.1")
+	if got := clientIP(r2); got != "1.2.3.4" {
+		t.Fatalf("expected xff ip, got %q", got)
+	}
+}
