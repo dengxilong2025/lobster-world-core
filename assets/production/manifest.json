@@ -52,6 +52,7 @@
       "tiles/base/tile_ground2_real_w256_h256.png",
       "tiles/base/tile_ground_real_w256_h256.png",
       "tiles/base/tile_sand2_real_w256_h256.png",
+      "tiles/base/tile_sand_basic_01_w256_h256.png",
       "tiles/base/tile_sand_real_w256_h256.png",
       "tiles/base/tile_stone_basic_01_w256_h256.png"
     ],
