@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,9 +63,9 @@ func TestAdoptionConfirm_Returns500AndDoesNotPublishWhenPersistFails(t *testing.
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	pubB64 := base64.StdEncoding.EncodeToString(pub)
 	lobsterID := "lob_1"
-	clientTs := int64(123)
+	clientTs := time.Now().Unix()
 	nonce := "n1"
-	msg := []byte("adopt_confirm|" + lobsterID + "|" + pubB64 + "|123|n1")
+	msg := []byte(fmt.Sprintf("adopt_confirm|%s|%s|%d|%s", lobsterID, pubB64, clientTs, nonce))
 	sig := ed25519.Sign(priv, msg)
 	sigB64 := base64.StdEncoding.EncodeToString(sig)
 

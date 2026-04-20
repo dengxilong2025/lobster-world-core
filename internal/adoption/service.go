@@ -26,6 +26,11 @@ type Service struct {
 	cooldown time.Duration
 
 	byLobster map[string]binding
+
+	// Minimal anti-replay: nonce cache + client_ts time window.
+	nonceTTL time.Duration
+	maxSkew  time.Duration
+	nonces   map[string]time.Time // key -> expiresAt
 }
 
 type binding struct {
@@ -38,6 +43,12 @@ type binding struct {
 type Options struct {
 	Clock    Clock
 	Cooldown time.Duration
+	// NonceTTL defines how long a (humanID,lobsterID,nonce) is considered "used".
+	// Defaults to 10 minutes.
+	NonceTTL time.Duration
+	// MaxSkew defines allowed time skew between client_ts (unix seconds) and server clock.
+	// Defaults to 5 minutes.
+	MaxSkew time.Duration
 }
 
 func NewService(opts Options) *Service {
@@ -49,11 +60,22 @@ func NewService(opts Options) *Service {
 	if cd <= 0 {
 		cd = 24 * time.Hour
 	}
+	nttl := opts.NonceTTL
+	if nttl <= 0 {
+		nttl = 10 * time.Minute
+	}
+	skew := opts.MaxSkew
+	if skew <= 0 {
+		skew = 5 * time.Minute
+	}
 
 	return &Service{
 		clock:    c,
 		cooldown: cd,
 		byLobster: map[string]binding{},
+		nonceTTL: nttl,
+		maxSkew:  skew,
+		nonces:   map[string]time.Time{},
 	}
 }
 
@@ -74,6 +96,10 @@ func (s *Service) ConfirmByHumanSig(humanPubKeyB64, lobsterID, sigB64 string, cl
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if err := s.checkReplayLocked(humanID, lobsterID, clientTs, nonce); err != nil {
+		return "", err
+	}
 
 	now := s.clock.Now()
 	if b, ok := s.byLobster[lobsterID]; ok && now.Before(b.cooldownUntil) {
@@ -102,6 +128,10 @@ func (s *Service) RevokeByHumanSig(humanPubKeyB64, lobsterID, sigB64 string, cli
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if err := s.checkReplayLocked(humanID, lobsterID, clientTs, nonce); err != nil {
+		return "", 0, err
+	}
 
 	b, ok := s.byLobster[lobsterID]
 	if !ok || b.humanID != humanID {
@@ -173,3 +203,31 @@ func deriveHumanID(humanPubKeyB64 string) (string, error) {
 	return fmt.Sprintf("human_%x", sum[:6]), nil
 }
 
+func (s *Service) checkReplayLocked(humanID, lobsterID string, clientTs int64, nonce string) error {
+	if clientTs <= 0 {
+		return fmt.Errorf("invalid client_ts")
+	}
+	now := s.clock.Now()
+	clientTime := time.Unix(clientTs, 0)
+	delta := now.Sub(clientTime)
+	if delta < 0 {
+		delta = -delta
+	}
+	if delta > s.maxSkew {
+		return fmt.Errorf("client_ts outside allowed window")
+	}
+
+	// opportunistic cleanup
+	for k, exp := range s.nonces {
+		if now.After(exp) {
+			delete(s.nonces, k)
+		}
+	}
+
+	key := fmt.Sprintf("%s|%s|%s", humanID, lobsterID, nonce)
+	if exp, ok := s.nonces[key]; ok && now.Before(exp) {
+		return fmt.Errorf("nonce already used")
+	}
+	s.nonces[key] = now.Add(s.nonceTTL)
+	return nil
+}
