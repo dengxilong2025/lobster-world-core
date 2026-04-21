@@ -20,6 +20,11 @@ type Projection struct {
 	// EnsureLoaded singleflight: avoid redundant rebuilds per world_id under concurrency.
 	loading map[string]*loadState
 
+	// bootstrapped marks worlds that have been rebuilt from EventStore at least once.
+	// This is distinct from "recent has key": live Apply() events can arrive before any
+	// initial load, and we still want to backfill history from the store.
+	bootstrapped map[string]bool
+
 	// per world cache of recent events, sorted by (ts desc, event_id desc)
 	recent map[string][]spec.Event
 	// per world relations cache: world -> entity -> other -> relation
@@ -55,6 +60,7 @@ func New(opts Options) *Projection {
 	return &Projection{
 		es:     opts.EventStore,
 		loading: map[string]*loadState{},
+		bootstrapped: map[string]bool{},
 		recent: map[string][]spec.Event{},
 		relations: map[string]map[string]map[string]Relation{},
 		relationReasons: map[string]map[string]map[string]RelationReason{},
@@ -93,7 +99,7 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 
 	// Fast path: already loaded.
 	p.mu.RLock()
-	if _, ok := p.recent[worldID]; ok {
+	if p.bootstrapped[worldID] {
 		p.mu.RUnlock()
 		return nil
 	}
@@ -107,7 +113,7 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 
 	// Slow path: acquire singleflight token (double-check under lock).
 	p.mu.Lock()
-	if _, ok := p.recent[worldID]; ok {
+	if p.bootstrapped[worldID] {
 		p.mu.Unlock()
 		return nil
 	}
@@ -139,20 +145,73 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 		return err
 	}
 
-	// Query returns ts asc; store in ts desc.
-	sort.Slice(events, func(i, j int) bool {
-		if events[i].Ts != events[j].Ts {
-			return events[i].Ts > events[j].Ts
+	// Merge with any live events already applied before the initial load (important when
+	// EventStore persists across process restarts).
+	merged := make(map[string]spec.Event, len(events)+len(p.recent[worldID]))
+	for _, e := range events {
+		if e.EventID == "" {
+			continue
 		}
-		return events[i].EventID > events[j].EventID
+		merged[e.EventID] = e
+	}
+	for _, e := range p.recent[worldID] {
+		if e.EventID == "" {
+			continue
+		}
+		merged[e.EventID] = e
+	}
+	combined := make([]spec.Event, 0, len(merged))
+	for _, e := range merged {
+		combined = append(combined, e)
+	}
+
+	// Store in ts desc.
+	sort.Slice(combined, func(i, j int) bool {
+		if combined[i].Ts != combined[j].Ts {
+			return combined[i].Ts > combined[j].Ts
+		}
+		return combined[i].EventID > combined[j].EventID
 	})
-	p.recent[worldID] = events
+	if len(combined) > p.limit {
+		combined = combined[:p.limit]
+	}
+	p.recent[worldID] = combined
 
 	p.relations[worldID] = map[string]map[string]Relation{}
 	p.relationReasons[worldID] = map[string]map[string]RelationReason{}
+	// Rebuild relations deterministically from the merged view.
+	// Apply in ts asc order.
+	sort.Slice(raw, func(i, j int) bool {
+		if raw[i].Ts != raw[j].Ts {
+			return raw[i].Ts < raw[j].Ts
+		}
+		return raw[i].EventID < raw[j].EventID
+	})
 	for _, e := range raw {
 		p.applyRelationLocked(e)
 	}
+	// Also apply relation updates from any live events that were not in raw.
+	// (raw comes from store.Query; combined may contain additional events from Apply().)
+	if len(combined) > 0 {
+		// combined is desc; walk reverse for asc.
+		for i := len(combined) - 1; i >= 0; i-- {
+			e := combined[i]
+			// Skip if raw already contained the event.
+			// (OK to be O(n^2) since limit is small; but keep it deterministic.)
+			found := false
+			for _, re := range raw {
+				if re.EventID == e.EventID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				p.applyRelationLocked(e)
+			}
+		}
+	}
+
+	p.bootstrapped[worldID] = true
 	p.mu.Unlock()
 	return nil
 }

@@ -83,3 +83,34 @@ func TestProjection_EnsureLoaded_SingleflightPerWorld(t *testing.T) {
 		t.Fatalf("expected Query count=1 (singleflight), got %d", got)
 	}
 }
+
+func TestProjection_EnsureLoaded_BackfillsWhenLiveEventsArriveBeforeInitialLoad(t *testing.T) {
+	t.Parallel()
+
+	es := &countingStore{
+		evs: []spec.Event{
+			{SchemaVersion: 1, EventID: "evt_old", Ts: 1, Tick: 1, WorldID: "w1", Scope: "world", Type: "x", Actors: []string{"a"}, Narrative: "old"},
+		},
+	}
+	p := New(Options{EventStore: es, Limit: 50})
+
+	// Simulate hub delivering a live event before any request triggers EnsureLoaded().
+	p.Apply(spec.Event{SchemaVersion: 1, EventID: "evt_new", Ts: 10, Tick: 10, WorldID: "w1", Scope: "world", Type: "y", Actors: []string{"a"}, Narrative: "new"})
+
+	if err := p.EnsureLoaded("w1"); err != nil {
+		t.Fatalf("EnsureLoaded: %v", err)
+	}
+	if got := es.Count(); got != 1 {
+		t.Fatalf("expected Query count=1, got %d", got)
+	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	list := p.recent["w1"]
+	if len(list) != 2 {
+		t.Fatalf("expected 2 events after backfill, got %d", len(list))
+	}
+	if list[0].EventID != "evt_new" || list[1].EventID != "evt_old" {
+		t.Fatalf("unexpected order after backfill: %#v", []string{list[0].EventID, list[1].EventID})
+	}
+}
