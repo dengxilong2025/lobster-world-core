@@ -270,6 +270,19 @@ func (w *world) step() {
 	w.state.ApplyDelta(done.Delta)
 	if err := w.appendAndPublish(done); err != nil {
 		log.Printf("sim: failed to persist action_completed world=%s err=%v", w.worldID, err)
+		return
+	}
+
+	// v0.3-M1: optional story layer. After an intent completes, emit at most one
+	// additional world-scope event (diplomacy/trade) to enrich spectator/replay.
+	if extra, ok := buildStoryWorldEvent(w.worldID, w.tick, w.seed, qi.ID, qi.Intent.Goal, qi.AcceptedEventID, done.EventID); ok {
+		ev := w.newEventLocked(extra.Type, extra.Actors, extra.Narrative)
+		ev.Delta = extra.Delta
+		ev.Trace = extra.Trace
+		w.state.ApplyDelta(ev.Delta)
+		if err := w.appendAndPublish(ev); err != nil {
+			log.Printf("sim: failed to persist story event world=%s type=%s err=%v", w.worldID, ev.Type, err)
+		}
 	}
 }
 
