@@ -2,13 +2,14 @@ package gateway
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 
 	"lobster-world-core/internal/auth"
 )
 
-func registerAuthRoutes(mux *http.ServeMux, a *auth.Service, limiter *ipRateLimiter) {
-	mux.Handle("POST /api/v0/auth/challenge", rateLimit(limiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func registerAuthRoutes(mux *http.ServeMux, a *auth.Service, limiter *ipRateLimiter, trustedProxies []*net.IPNet) {
+	mux.Handle("POST /api/v0/auth/challenge", rateLimitWithTrusted(limiter, trustedProxies, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			LobsterPubkey string `json:"lobster_pubkey"`
 			ClientTs      int64  `json:"client_ts"`
@@ -29,7 +30,7 @@ func registerAuthRoutes(mux *http.ServeMux, a *auth.Service, limiter *ipRateLimi
 		})
 	})))
 
-	mux.Handle("POST /api/v0/auth/prove", rateLimit(limiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("POST /api/v0/auth/prove", rateLimitWithTrusted(limiter, trustedProxies, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			LobsterPubkey string `json:"lobster_pubkey"`
 			Challenge     string `json:"challenge"`
@@ -71,4 +72,3 @@ func registerAuthRoutes(mux *http.ServeMux, a *auth.Service, limiter *ipRateLimi
 		})
 	})
 }
-

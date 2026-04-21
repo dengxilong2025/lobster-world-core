@@ -60,3 +60,19 @@ func TestClientIP_TrustsXFFOnlyFromLoopbackProxy(t *testing.T) {
 		t.Fatalf("expected xff ip, got %q", got)
 	}
 }
+
+func TestClientIP_TrustsXFFFromConfiguredProxyCIDR(t *testing.T) {
+	t.Parallel()
+
+	trusted, err := parseTrustedProxyCIDRs([]string{"10.0.0.0/8"})
+	if err != nil {
+		t.Fatalf("parse trusted: %v", err)
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "http://example/", nil)
+	r.RemoteAddr = "10.1.2.3:9999"
+	r.Header.Set("X-Forwarded-For", "8.8.8.8, 10.1.2.3")
+	if got := clientIPWithTrusted(r, trusted); got != "8.8.8.8" {
+		t.Fatalf("expected xff ip, got %q", got)
+	}
+}

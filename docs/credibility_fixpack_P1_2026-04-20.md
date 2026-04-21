@@ -64,6 +64,7 @@
 - 默认使用 `RemoteAddr` 作为 client IP
 - 仅当请求来自“受控反代”时才信任 `X-Forwarded-For`
   - MVP 策略：只信任 `RemoteAddr` 为 loopback（127.0.0.1 / ::1）的请求携带的 XFF
+- 如需在真实反代/Ingress 后信任 XFF：配置 `TRUSTED_PROXY_CIDRS`（逗号分隔 CIDR 列表），仅当 `RemoteAddr` 命中这些网段时才解析 XFF
 - 在文档写清楚：如需部署在反代后，应如何配置与预期行为
 
 ### 验收
@@ -114,4 +115,3 @@
 5) P1-E（Docker 资源一致性）  
 6) P1-F（adoption 防重放）  
 7) 同步更新 WBS/文档（每做完一项就同步，避免漂移）
-

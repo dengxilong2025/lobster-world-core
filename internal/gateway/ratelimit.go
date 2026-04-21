@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -60,6 +61,49 @@ func (l *ipRateLimiter) get(ip string) *rate.Limiter {
 }
 
 func clientIP(r *http.Request) string {
+	return clientIPWithTrusted(r, nil)
+}
+
+func parseTrustedProxyCIDRs(cidrs []string) ([]*net.IPNet, error) {
+	out := make([]*net.IPNet, 0, len(cidrs))
+	for _, s := range cidrs {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		_, n, err := net.ParseCIDR(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid trusted proxy cidr %q: %w", s, err)
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
+func isTrustedProxyHost(host string, trusted []*net.IPNet) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	// MVP default: treat loopback as trusted proxy (local dev / compose).
+	if ip.IsLoopback() {
+		return true
+	}
+	for _, n := range trusted {
+		if n != nil && n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// clientIPWithTrusted returns the effective client IP for rate limiting.
+//
+// Security rule:
+// - By default we trust only loopback proxies (local dev/compose).
+// - Additionally, callers can provide trusted proxy CIDRs; only when RemoteAddr is within
+//   those CIDRs do we honor X-Forwarded-For.
+func clientIPWithTrusted(r *http.Request, trusted []*net.IPNet) string {
 	remote := strings.TrimSpace(r.RemoteAddr)
 
 	// Derive remote host (best-effort).
@@ -69,8 +113,7 @@ func clientIP(r *http.Request) string {
 	}
 
 	// Trust X-Forwarded-For ONLY when we are behind a controlled reverse proxy.
-	// MVP rule: treat loopback as "trusted proxy" (typical local dev / compose setups).
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+	if isTrustedProxyHost(host, trusted) {
 		if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
 			parts := strings.Split(xff, ",")
 			if len(parts) > 0 {
@@ -86,8 +129,12 @@ func clientIP(r *http.Request) string {
 }
 
 func rateLimit(l *ipRateLimiter, next http.Handler) http.Handler {
+	return rateLimitWithTrusted(l, nil, next)
+}
+
+func rateLimitWithTrusted(l *ipRateLimiter, trusted []*net.IPNet, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
+		ip := clientIPWithTrusted(r, trusted)
 		if ip == "" {
 			ip = "unknown"
 		}

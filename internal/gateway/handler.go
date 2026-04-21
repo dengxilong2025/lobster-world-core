@@ -19,6 +19,10 @@ type Options struct {
 	Adoption   *adoption.Service
 	Spectator  *spectator.Projection
 	Sim        *sim.Engine
+
+	// TrustedProxyCIDRs configures reverse proxies that are allowed to set X-Forwarded-For.
+	// If empty, only loopback proxies are trusted (safe default).
+	TrustedProxyCIDRs []string
 }
 
 // NewHandler returns the root HTTP handler for the service.
@@ -54,9 +58,10 @@ func NewHandler(opts Options) http.Handler {
 	// v0 abuse protection: simple IP-based rate limit for auth endpoints.
 	// Default policy: allow short burst then throttle.
 	authLimiter := newIPRateLimiter(2, 2, 10*time.Minute) // 2 req/sec with burst 2 per IP
+	trusted, _ := parseTrustedProxyCIDRs(opts.TrustedProxyCIDRs)
 
 	registerHealthRoutes(mux)
-	registerAuthRoutes(mux, a, authLimiter)
+	registerAuthRoutes(mux, a, authLimiter, trusted)
 	registerEventRoutes(mux, es, hub)
 	registerIntentRoutes(mux, sm)
 	registerAdoptionRoutes(mux, a, ad, es, hub)

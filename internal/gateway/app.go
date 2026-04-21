@@ -47,6 +47,10 @@ type AppOptions struct {
 
 	// MaxIntentQueue bounds the number of pending intents per world (safety valve).
 	MaxIntentQueue int
+
+	// TrustedProxyCIDRs configures reverse proxies that are allowed to set X-Forwarded-For.
+	// If empty, only loopback proxies are trusted (safe default).
+	TrustedProxyCIDRs []string
 }
 
 func NewAppWithOptions(opts AppOptions) *App {
@@ -83,6 +87,7 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Adoption:   a.Adoption,
 		Spectator:  a.Spectator,
 		Sim:        a.Sim,
+		TrustedProxyCIDRs: opts.TrustedProxyCIDRs,
 	})
 	return a
 }

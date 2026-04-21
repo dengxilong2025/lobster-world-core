@@ -20,6 +20,7 @@ func main() {
 
 	app := gateway.NewAppWithOptions(gateway.AppOptions{
 		Shock: gateway.ShockConfigFromEnv(),
+		TrustedProxyCIDRs: gateway.TrustedProxyCIDRsFromEnv(),
 	})
 
 	srv := &http.Server{
