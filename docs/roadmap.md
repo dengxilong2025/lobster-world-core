@@ -21,7 +21,7 @@
 - [x] Trace 自动填充（意图执行/演化）
 - [x] replay/highlight 蝴蝶效应增强（trace + cause narrative）
 - [x] v0.3-M1 最小剧本层：外交/贸易事件（alliance_formed / treaty_signed / trade_agreement）
-- [ ] spectator 首页“世界阶段/状态摘要”（更强的解说引导）
+- [x] spectator 首页“世界阶段/状态摘要”：行动建议优先（关键词+预期事件类型）
 - [ ] 更稳定的“冲击期脚本化回放”（beats 结构更一致）
 
 ## 阶段 4（工程化/上线准备：待定）
