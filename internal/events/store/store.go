@@ -64,15 +64,29 @@ func (s *InMemoryEventStore) Append(e spec.Event) error {
 	}
 	s.byID[e.WorldID][e.EventID] = e
 
-	// Keep per-world slice sorted by (ts, event_id) so queries are stable.
-	sort.Slice(s.byWorld[e.WorldID], func(i, j int) bool {
-		a := s.byWorld[e.WorldID][i]
-		b := s.byWorld[e.WorldID][j]
-		if a.Ts != b.Ts {
-			return a.Ts < b.Ts
+	// Keep per-world slice sorted by (ts asc, event_id asc) so queries are stable.
+	//
+	// Optimization: events are usually produced in chronological order, so we can skip
+	// the O(n log n) full sort for the common append-at-end case. We only sort if the
+	// last append violated ordering (ts/event_id regression).
+	list := s.byWorld[e.WorldID]
+	n := len(list)
+	if n >= 2 {
+		prev := list[n-2]
+		cur := list[n-1]
+		inOrder := prev.Ts < cur.Ts || (prev.Ts == cur.Ts && prev.EventID <= cur.EventID)
+		if !inOrder {
+			sort.Slice(list, func(i, j int) bool {
+				a := list[i]
+				b := list[j]
+				if a.Ts != b.Ts {
+					return a.Ts < b.Ts
+				}
+				return a.EventID < b.EventID
+			})
+			s.byWorld[e.WorldID] = list
 		}
-		return a.EventID < b.EventID
-	})
+	}
 
 	return nil
 }

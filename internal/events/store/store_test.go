@@ -50,6 +50,47 @@ func TestInMemoryEventStore_AppendAndQueryByWorldID(t *testing.T) {
 	}
 }
 
+func TestInMemoryEventStore_AppendOutOfOrder_StillReturnsSorted(t *testing.T) {
+	t.Parallel()
+
+	s := NewInMemoryEventStore()
+
+	base := spec.Event{
+		SchemaVersion: 1,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "x",
+		Actors:        []string{"a"},
+		Narrative:     "n",
+	}
+
+	// Append later event first, then earlier event.
+	e2 := base
+	e2.EventID = "evt_2"
+	e2.Ts = 20
+	e1 := base
+	e1.EventID = "evt_1"
+	e1.Ts = 10
+
+	if err := s.Append(e2); err != nil {
+		t.Fatalf("append e2: %v", err)
+	}
+	if err := s.Append(e1); err != nil {
+		t.Fatalf("append e1: %v", err)
+	}
+
+	got, err := s.Query(Query{WorldID: "w1", SinceTs: 0, Limit: 10})
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(got))
+	}
+	if got[0].EventID != "evt_1" || got[1].EventID != "evt_2" {
+		t.Fatalf("unexpected order: %v, %v", got[0].EventID, got[1].EventID)
+	}
+}
+
 func TestInMemoryEventStore_QueryFiltersBySinceTs(t *testing.T) {
 	t.Parallel()
 
