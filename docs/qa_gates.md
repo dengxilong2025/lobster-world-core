@@ -27,6 +27,10 @@
 - `review_bundle.zip`（一键打包，含 docs+code+tests）
 - 或至少：`llms.txt` + `docs/architecture.md` + `docs/testing.md` + 关键代码目录
 
+此外（v0.2-M2 推荐提供）：
+- `out/agent_runs/<ts>/summary.json`：一轮批测的成功/失败计数与失败原因聚合
+- `out/agent_runs/<ts>/export_*.ndjson`：对应世界的事件导出（可离线复现/对比）
+
 ### 输出格式（统一）
 每轮第三方测试输出一个 Markdown：
 - P0（必须修复）：会导致崩溃/数据错/安全风险/决定论破坏
@@ -36,4 +40,3 @@
 ### 合格判定
 - P0 必须清零
 - P1 有明确计划与排期（写入 WBS）
-

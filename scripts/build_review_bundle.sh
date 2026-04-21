@@ -15,13 +15,14 @@ zip -r "$OUT" \
   llms.txt \
   README.md \
   docs \
+  scripts \
   cmd \
   internal \
   tests \
   go.mod go.sum \
   -x "**/.git/**" \
   -x "**/node_modules/**" \
+  -x "out/**" \
   -x "**/*.zip"
 
 echo "OK: ${OUT}"
-
