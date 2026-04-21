@@ -166,7 +166,7 @@ const uiAssetsPageHTML = `<!doctype html>
     }
 
     function saveExportLog(){
-      localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(exportLog));
+      try { localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(exportLog)); } catch (e) {}
       renderExportLog();
     }
 
@@ -221,7 +221,7 @@ const uiAssetsPageHTML = `<!doctype html>
     }
 
     function saveQA(){
-      localStorage.setItem(QA_KEY, JSON.stringify(qaLast));
+      try { localStorage.setItem(QA_KEY, JSON.stringify(qaLast)); } catch (e) {}
       renderQA();
     }
 
