@@ -23,8 +23,17 @@ func TestShockConfigFromEnv_ParsesNumericOverrides(t *testing.T) {
 	if cfg.EpochTicks != 10 || cfg.WarningOffset != 2 || cfg.DurationTicks != 3 || cfg.CooldownTicks != 11 {
 		t.Fatalf("unexpected cfg: %#v", cfg)
 	}
-	if len(cfg.Candidates) == 0 || cfg.Candidates[0].Key == "" {
-		t.Fatalf("expected default candidate, got %#v", cfg.Candidates)
+	if len(cfg.Candidates) < 3 {
+		t.Fatalf("expected >=3 built-in candidates, got %d", len(cfg.Candidates))
+	}
+	seen := map[string]bool{}
+	for _, c := range cfg.Candidates {
+		if c.Key == "" {
+			t.Fatalf("unexpected empty key: %#v", c)
+		}
+		if seen[c.Key] {
+			t.Fatalf("duplicate key %q", c.Key)
+		}
+		seen[c.Key] = true
 	}
 }
-
