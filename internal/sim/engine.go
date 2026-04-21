@@ -21,6 +21,7 @@ type Engine struct {
 	hub *stream.Hub
 
 	tickInterval time.Duration
+	intentAcceptTimeout time.Duration
 	shock        *ShockConfig
 	seed         int64
 	maxIntentQueue int
@@ -33,6 +34,10 @@ type Options struct {
 	EventStore    store.EventStore
 	Hub           *stream.Hub
 	TickInterval  time.Duration // default 5s (product choice B)
+	// IntentAcceptTimeout bounds how long SubmitIntent waits for the world loop to
+	// durably accept an intent (i.e. persist intent_accepted event).
+	// Default 2s.
+	IntentAcceptTimeout time.Duration
 	Shock         *ShockConfig
 	Seed          int64
 	// MaxIntentQueue bounds the number of pending intents in a world (accepted but not executed yet).
@@ -45,6 +50,10 @@ func New(opts Options) *Engine {
 	if ti <= 0 {
 		ti = 5 * time.Second
 	}
+	at := opts.IntentAcceptTimeout
+	if at <= 0 {
+		at = 2 * time.Second
+	}
 	mq := opts.MaxIntentQueue
 	if mq <= 0 {
 		mq = 1024
@@ -53,6 +62,7 @@ func New(opts Options) *Engine {
 		es:           opts.EventStore,
 		hub:          opts.Hub,
 		tickInterval: ti,
+		intentAcceptTimeout: at,
 		shock:        opts.Shock,
 		seed:         opts.Seed,
 		maxIntentQueue: mq,
@@ -106,7 +116,7 @@ func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string, err e
 			return "", aerr
 		}
 		return id, nil
-	case <-time.After(2 * time.Second):
+	case <-time.After(e.intentAcceptTimeout):
 		return "", fmt.Errorf("timeout waiting for intent acceptance")
 	}
 }
