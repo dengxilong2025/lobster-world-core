@@ -88,3 +88,51 @@ func TestDeriveWorldSummary_ActionHint_IsActionableAndNotDuplicateOfHook(t *test
 		t.Fatalf("expected hint not to duplicate hook: hook=%q hint=%q", hook, hint)
 	}
 }
+
+func TestDeriveWorldSummary_ActionHint_FamineMentionsTradeAndExpectedEvent(t *testing.T) {
+	t.Parallel()
+
+	ws := deriveWorldSummary(sim.Status{
+		Tick:  10,
+		State: sim.WorldState{Food: 15, Population: 120, Order: 50, Trust: 50, Knowledge: 10, Conflict: 10},
+	}, []string{"粮仓见底"})
+
+	found := false
+	for _, b := range ws.Summary {
+		if !strings.HasPrefix(b, "建议：") {
+			continue
+		}
+		if (strings.Contains(b, "贸易") || strings.Contains(b, "集市") || strings.Contains(b, "交换") || strings.Contains(b, "商路")) &&
+			strings.Contains(b, "trade_agreement") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected famine hint to mention trade keywords and trade_agreement, got summary=%v", ws.Summary)
+	}
+}
+
+func TestDeriveWorldSummary_ActionHint_WarMentionsDiplomacyAndExpectedEvent(t *testing.T) {
+	t.Parallel()
+
+	ws := deriveWorldSummary(sim.Status{
+		Tick:  10,
+		State: sim.WorldState{Food: 50, Population: 120, Order: 50, Trust: 40, Knowledge: 10, Conflict: 65},
+	}, []string{"边境冲突升级"})
+
+	found := false
+	for _, b := range ws.Summary {
+		if !strings.HasPrefix(b, "建议：") {
+			continue
+		}
+		if (strings.Contains(b, "停战") || strings.Contains(b, "谈判") || strings.Contains(b, "条约") || strings.Contains(b, "结盟")) &&
+			(strings.Contains(b, "alliance_formed") || strings.Contains(b, "treaty_signed")) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected war hint to mention diplomacy keywords and alliance_formed/treaty_signed, got summary=%v", ws.Summary)
+	}
+}
