@@ -71,13 +71,25 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 	if st.State.Trust <= 25 {
 		bullets = append(bullets, "风险：互不信任蔓延")
 	}
-	// Action hint: make it concrete and operational (v0 UX).
-	actionHint := func(stage string) string {
+	// Action hints (v0.3+): keep them actionable, and mention expected story events when applicable.
+	primaryHint := func() string {
+		// Risk priority: food -> conflict -> trust -> order -> stage/default.
+		switch {
+		case st.State.Food <= 20:
+			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
+		case st.State.Conflict >= 60:
+			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict"
+		case st.State.Trust <= 25:
+			return "建议：优先修复信任——提交“结盟/联盟/合作/互助”意图，观察 alliance_formed（或 trade_agreement）是否出现并抬升 trust"
+		case st.State.Order <= 20:
+			return "建议：优先稳秩序——提交“整顿/裁决/执法/议会”意图，观察 order 是否回升并避免连锁崩溃"
+		}
 		switch stage {
 		case "饥荒":
-			return "建议：提交一个“补给/狩猎”意图，优先抬升食物并避免秩序塌陷"
+			// If we are in famine stage but not below the hard risk threshold, still steer toward trade.
+			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
 		case "战乱":
-			return "建议：提交一个“停战/结盟/谈判”意图，测试阵营重组与信任阈值"
+			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict"
 		case "失序":
 			return "建议：提交一个“整顿/裁决/执法”意图，稳定秩序以避免连锁崩溃"
 		case "启蒙":
@@ -88,12 +100,29 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 			return "建议：提交一个“探索/贸易/合作”意图，推动世界叙事进入下一节点"
 		}
 	}
-	hint := actionHint(stage)
-	// Avoid accidental semantic duplication between hook and hint (rare but cheap to guard).
-	if strings.TrimSpace(strings.TrimPrefix(hook, "看点：")) == strings.TrimSpace(strings.TrimPrefix(hint, "建议：")) {
-		hint = "建议：提交一个意图推动世界叙事（观察事件链如何扩散）"
+	secondaryHint := func() string {
+		joined := strings.Join(recent, "；")
+		// Prefer diplomacy in war / betrayal contexts to leverage story events.
+		if stage == "战乱" || strings.Contains(joined, "背叛") || strings.Contains(joined, "翻脸") {
+			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向"
+		}
+		if stage == "饥荒" {
+			return "建议：备选补给——提交“补给/狩猎”意图，观察 food 回升并避免秩序塌陷"
+		}
+		return ""
 	}
-	bullets = append(bullets, hint)
+
+	hints := []string{primaryHint()}
+	if h2 := strings.TrimSpace(secondaryHint()); h2 != "" {
+		hints = append(hints, h2)
+	}
+	// Avoid accidental semantic duplication between hook and hints.
+	for i := range hints {
+		if strings.TrimSpace(strings.TrimPrefix(hook, "看点：")) == strings.TrimSpace(strings.TrimPrefix(hints[i], "建议：")) {
+			hints[i] = "建议：提交一个意图推动世界叙事（观察事件链如何扩散）"
+		}
+	}
+	bullets = append(bullets, hints...)
 
 	// Deduplicate (just in case).
 	seen := map[string]struct{}{}
