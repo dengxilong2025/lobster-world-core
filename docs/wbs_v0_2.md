@@ -40,7 +40,7 @@
 | ID | 任务 | 产出/验收标准 | 状态 | 备注 |
 |---|---|---|---|---|
 | AT-01 | 统一“智能体测试脚本” | 提供可重复运行脚本（或 Make target） | IN_PROGRESS | `scripts/agent_test_v0_2_m2.sh` |
-| AT-02 | 批量 world 管理 | 支持批量创建 world_id / 回收策略（文档即可） | TODO | 避免污染 |
+| AT-02 | 批量 world 管理 | 支持批量创建 world_id / 回收策略（文档即可） | DONE | 见 /ui 使用手册“批量 world_id 管理策略” |
 | AT-03 | 结果采集 | 每轮输出 replay/export（NDJSON）与失败原因 | DONE | 脚本输出 summary.json + ndjson |
 
 ---
