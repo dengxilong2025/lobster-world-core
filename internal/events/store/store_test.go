@@ -91,6 +91,54 @@ func TestInMemoryEventStore_AppendOutOfOrder_StillReturnsSorted(t *testing.T) {
 	}
 }
 
+func TestInMemoryEventStore_GetNeighbors(t *testing.T) {
+	t.Parallel()
+
+	s := NewInMemoryEventStore()
+	base := spec.Event{
+		SchemaVersion: 1,
+		WorldID:       "w1",
+		Scope:         "world",
+		Type:          "x",
+		Actors:        []string{"a"},
+		Narrative:     "n",
+	}
+	e1 := base
+	e1.EventID = "evt_1"
+	e1.Ts = 10
+	e2 := base
+	e2.EventID = "evt_2"
+	e2.Ts = 20
+	e3 := base
+	e3.EventID = "evt_3"
+	e3.Ts = 30
+	_ = s.Append(e1)
+	_ = s.Append(e2)
+	_ = s.Append(e3)
+
+	prev, next, okPrev, okNext, err := s.GetNeighbors("w1", "evt_2", 1)
+	if err != nil {
+		t.Fatalf("GetNeighbors: %v", err)
+	}
+	if !okPrev || !okNext {
+		t.Fatalf("expected both neighbors true, got prev=%v next=%v", okPrev, okNext)
+	}
+	if prev.EventID != "evt_1" || next.EventID != "evt_3" {
+		t.Fatalf("unexpected neighbors: prev=%s next=%s", prev.EventID, next.EventID)
+	}
+
+	_, n2, okPrev, okNext, err := s.GetNeighbors("w1", "evt_1", 1)
+	if err != nil {
+		t.Fatalf("GetNeighbors(1): %v", err)
+	}
+	if okPrev {
+		t.Fatalf("expected no prev for first event")
+	}
+	if !okNext || n2.EventID != "evt_2" {
+		t.Fatalf("expected next=evt_2, got okNext=%v next=%s", okNext, n2.EventID)
+	}
+}
+
 func TestInMemoryEventStore_QueryFiltersBySinceTs(t *testing.T) {
 	t.Parallel()
 

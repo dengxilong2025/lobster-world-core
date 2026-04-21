@@ -13,6 +13,10 @@ import (
 	"lobster-world-core/internal/sim"
 )
 
+type neighborStore interface {
+	GetNeighbors(worldID, eventID string, radius int) (prev, next spec.Event, okPrev, okNext bool, err error)
+}
+
 func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator.Projection, sm *sim.Engine) {
 	// Replay highlight (MVP): return a structured "script replay" for 30s.
 	mux.HandleFunc("GET /api/v0/replay/highlight", func(w http.ResponseWriter, r *http.Request) {
@@ -23,12 +27,6 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "world_id and event_id are required")
 			return
 		}
-		events, err := es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: 1000})
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-			return
-		}
-
 		target, ok, err := es.GetByID(worldID, eventID)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -41,19 +39,38 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 
 		// Find neighbor events to give replay context (MVP narration).
 		var prev, next *spec.Event
-		for i := range events {
-			if events[i].EventID == eventID {
-				if i > 0 {
-					prev = &events[i-1]
+		if ns, ok := es.(neighborStore); ok {
+			p, n, okPrev, okNext, nerr := ns.GetNeighbors(worldID, eventID, 1)
+			if nerr == nil {
+				if okPrev {
+					tmp := p
+					prev = &tmp
 				}
-				if i+1 < len(events) {
-					next = &events[i+1]
+				if okNext {
+					tmp := n
+					next = &tmp
 				}
-				break
+			}
+		} else {
+			events, err := es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: 1000})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+				return
+			}
+			for i := range events {
+				if events[i].EventID == eventID {
+					if i > 0 {
+						prev = &events[i-1]
+					}
+					if i+1 < len(events) {
+						next = &events[i+1]
+					}
+					break
+				}
 			}
 		}
-		beats := buildReplayBeats(worldID, target, prev, next, es, sp, sm)
 
+		beats := buildReplayBeats(worldID, target, prev, next, es, sp, sm)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":           true,
 			"replay_id":    "rp_" + target.EventID,
