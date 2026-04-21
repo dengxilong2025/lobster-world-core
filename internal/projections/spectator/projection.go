@@ -17,6 +17,9 @@ type Projection struct {
 
 	es store.EventStore
 
+	// EnsureLoaded singleflight: avoid redundant rebuilds per world_id under concurrency.
+	loading map[string]*loadState
+
 	// per world cache of recent events, sorted by (ts desc, event_id desc)
 	recent map[string][]spec.Event
 	// per world relations cache: world -> entity -> other -> relation
@@ -25,6 +28,11 @@ type Projection struct {
 	relationReasons map[string]map[string]map[string]RelationReason
 	limit  int
 	hotHalfLifeTicks int64
+}
+
+type loadState struct {
+	done chan struct{}
+	err  error
 }
 
 type Options struct {
@@ -46,6 +54,7 @@ func New(opts Options) *Projection {
 	}
 	return &Projection{
 		es:     opts.EventStore,
+		loading: map[string]*loadState{},
 		recent: map[string][]spec.Event{},
 		relations: map[string]map[string]map[string]Relation{},
 		relationReasons: map[string]map[string]map[string]RelationReason{},
@@ -78,19 +87,58 @@ func (p *Projection) Apply(e spec.Event) {
 // EnsureLoaded lazily loads recent events from the event store if the cache is empty.
 // This supports process restarts and avoids relying solely on live event delivery.
 func (p *Projection) EnsureLoaded(worldID string) error {
-	p.mu.RLock()
-	_, ok := p.recent[worldID]
-	p.mu.RUnlock()
 	if p.es == nil {
 		return nil
 	}
 
+	// Fast path: already loaded.
+	p.mu.RLock()
+	if _, ok := p.recent[worldID]; ok {
+		p.mu.RUnlock()
+		return nil
+	}
+	// If another goroutine is loading this world, wait.
+	if st := p.loading[worldID]; st != nil {
+		p.mu.RUnlock()
+		<-st.done
+		return st.err
+	}
+	p.mu.RUnlock()
+
+	// Slow path: acquire singleflight token (double-check under lock).
+	p.mu.Lock()
+	if _, ok := p.recent[worldID]; ok {
+		p.mu.Unlock()
+		return nil
+	}
+	if st := p.loading[worldID]; st != nil {
+		p.mu.Unlock()
+		<-st.done
+		return st.err
+	}
+	st := &loadState{done: make(chan struct{})}
+	p.loading[worldID] = st
+	p.mu.Unlock()
+
+	// Perform load outside lock.
 	events, err := p.es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: p.limit})
+	var raw []spec.Event
+	if err == nil {
+		// Build relation cache deterministically from event log (ts asc from store.Query).
+		// Keep a ts-asc copy for relation rebuild.
+		raw = append([]spec.Event{}, events...)
+	}
+
+	// Publish result, unblock waiters.
+	p.mu.Lock()
+	delete(p.loading, worldID)
+	st.err = err
+	close(st.done)
 	if err != nil {
+		p.mu.Unlock()
 		return err
 	}
 
-	p.mu.Lock()
 	// Query returns ts asc; store in ts desc.
 	sort.Slice(events, func(i, j int) bool {
 		if events[i].Ts != events[j].Ts {
@@ -98,23 +146,10 @@ func (p *Projection) EnsureLoaded(worldID string) error {
 		}
 		return events[i].EventID > events[j].EventID
 	})
-	// If cache exists and appears up-to-date, skip rebuild to reduce churn.
-	if ok {
-		cur := p.recent[worldID]
-		if len(cur) == len(events) {
-			sameHead := (len(cur) == 0 && len(events) == 0) || (len(cur) > 0 && len(events) > 0 && cur[0].EventID == events[0].EventID)
-			if sameHead {
-				p.mu.Unlock()
-				return nil
-			}
-		}
-	}
 	p.recent[worldID] = events
 
-	// Build relation cache deterministically from event log (ts asc from store.Query).
 	p.relations[worldID] = map[string]map[string]Relation{}
 	p.relationReasons[worldID] = map[string]map[string]RelationReason{}
-	raw, _ := p.es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: p.limit})
 	for _, e := range raw {
 		p.applyRelationLocked(e)
 	}
