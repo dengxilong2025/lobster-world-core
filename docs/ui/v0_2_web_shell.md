@@ -203,6 +203,9 @@ out/agent_runs/<ts>/
 
 其中 `export_*.ndjson` 可直接用于离线复现或作为第三方审计输入。
 
+此外脚本会输出一份汇总：
+- `summary.json`：成功/失败计数与失败原因（按 HTTP 状态码聚合）
+
 ## 6) 常见问题（FAQ）
 
 ### Q1：/ui 上显示 SSE 连接中断？

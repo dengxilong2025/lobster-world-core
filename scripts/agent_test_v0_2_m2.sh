@@ -82,6 +82,22 @@ log "n=${N}"
 log "export_limit=${EXPORT_LIMIT}"
 log "run_dir=${RUN_DIR}"
 
+declare -A fail_by_code=()
+declare -A ok_by_kind=()
+declare -A fail_by_kind=()
+
+inc() {
+  local -n m=$1
+  local k=$2
+  m["$k"]=$(( ${m["$k"]:-0} + 1 ))
+}
+
+is_success_code() {
+  local code="$1"
+  [[ "$code" =~ ^[0-9]{3}$ ]] || return 1
+  (( code >= 200 && code < 300 ))
+}
+
 urlencode() {
   # Prefer python3 (widely available), fall back to jq, and lastly to a conservative replacement.
   local s="$1"
@@ -148,17 +164,66 @@ for ((i=1; i<=N; i++)); do
 
   post_code="$(post_intent "${goal}" "${RUN_DIR}/intent_${i}.json" "${RUN_DIR}/intent_${i}.status")"
   log "POST /intents => ${post_code}"
+  if is_success_code "${post_code}"; then
+    inc ok_by_kind "intents"
+  else
+    inc fail_by_kind "intents"
+    inc fail_by_code "${post_code}"
+  fi
 
   home_url="${BASE_URL}/api/v0/spectator/home?world_id=$(urlencode "${WORLD_ID}")"
   home_code="$(get_json "${home_url}" "${RUN_DIR}/home_${i}.json" "${RUN_DIR}/home_${i}.status")"
   log "GET /spectator/home => ${home_code}"
+  if is_success_code "${home_code}"; then
+    inc ok_by_kind "home"
+  else
+    inc fail_by_kind "home"
+    inc fail_by_code "${home_code}"
+  fi
 
   export_url="${BASE_URL}/api/v0/replay/export?world_id=$(urlencode "${WORLD_ID}")&limit=${EXPORT_LIMIT}"
   export_code="$(get_ndjson "${export_url}" "${RUN_DIR}/export_${i}.ndjson" "${RUN_DIR}/export_${i}.status")"
   log "GET /replay/export => ${export_code}"
+  if is_success_code "${export_code}"; then
+    inc ok_by_kind "export"
+  else
+    inc fail_by_kind "export"
+    inc fail_by_code "${export_code}"
+  fi
 
   # Small delay to allow tick to advance in local fast config.
   sleep 0.2
 done
 
+summary_path="${RUN_DIR}/summary.json"
+{
+  echo "{"
+  echo "  \"run_id\": \"${TS}\","
+  echo "  \"base_url\": \"${BASE_URL}\","
+  echo "  \"world_id\": \"${WORLD_ID}\","
+  echo "  \"n\": ${N},"
+  echo "  \"export_limit\": ${EXPORT_LIMIT},"
+  echo "  \"ok\": {"
+  echo "    \"intents\": ${ok_by_kind["intents"]:-0},"
+  echo "    \"home\": ${ok_by_kind["home"]:-0},"
+  echo "    \"export\": ${ok_by_kind["export"]:-0}"
+  echo "  },"
+  echo "  \"fail\": {"
+  echo "    \"intents\": ${fail_by_kind["intents"]:-0},"
+  echo "    \"home\": ${fail_by_kind["home"]:-0},"
+  echo "    \"export\": ${fail_by_kind["export"]:-0}"
+  echo "  },"
+  echo "  \"fail_by_http_code\": {"
+  first=1
+  for k in "${!fail_by_code[@]}"; do
+    v="${fail_by_code[$k]}"
+    if [[ "$first" == "1" ]]; then first=0; else echo ","; fi
+    printf "    \"%s\": %d" "$k" "$v"
+  done
+  if [[ "${first}" == "0" ]]; then echo; fi
+  echo "  }"
+  echo "}"
+} > "${summary_path}"
+
+log "summary=${summary_path}"
 log "DONE"
