@@ -20,11 +20,11 @@
 - [x] idle-time 内生演化（world_evolved）
 - [x] Trace 自动填充（意图执行/演化）
 - [x] replay/highlight 蝴蝶效应增强（trace + cause narrative）
+- [x] v0.3-M1 最小剧本层：外交/贸易事件（alliance_formed / treaty_signed / trade_agreement）
 - [ ] spectator 首页“世界阶段/状态摘要”（更强的解说引导）
 - [ ] 更稳定的“冲击期脚本化回放”（beats 结构更一致）
 
 ## 阶段 4（工程化/上线准备：待定）
 - [ ] 指标与可观测性（请求、队列、tick 延迟、事件写入失败）
 - [ ] 压测脚本与基准（auth/intents/sse）
-- [ ] replay/export 的稳定格式与版本化
-
+- [x] replay/export 的稳定格式与版本化
