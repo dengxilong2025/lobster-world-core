@@ -86,9 +86,11 @@ func (s *Service) CreateChallenge(pubkeyBase64 string) (challenge string, ttlSec
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.clock.Now()
+	s.cleanupExpiredLocked(now)
 	s.challenges[challenge] = challengeRecord{
 		pubkey:    pubkeyBase64,
-		expiresAt: s.clock.Now().Add(s.challengeTTL),
+		expiresAt: now.Add(s.challengeTTL),
 		used:      false,
 	}
 
@@ -103,6 +105,8 @@ func (s *Service) Prove(pubkeyBase64, challenge, sigBase64 string) (sessionToken
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.clock.Now()
+	s.cleanupExpiredLocked(now)
 
 	rec, ok := s.challenges[challenge]
 	if !ok {
@@ -111,7 +115,7 @@ func (s *Service) Prove(pubkeyBase64, challenge, sigBase64 string) (sessionToken
 	if rec.used {
 		return "", 0, "", fmt.Errorf("challenge already used")
 	}
-	if s.clock.Now().After(rec.expiresAt) {
+	if now.After(rec.expiresAt) {
 		return "", 0, "", fmt.Errorf("challenge expired")
 	}
 	if rec.pubkey != pubkeyBase64 {
@@ -142,7 +146,7 @@ func (s *Service) Prove(pubkeyBase64, challenge, sigBase64 string) (sessionToken
 	sessionToken = base64.StdEncoding.EncodeToString(raw)
 
 	lobsterID = deriveLobsterID(pub)
-	exp := s.clock.Now().Add(s.sessionTTL)
+	exp := now.Add(s.sessionTTL)
 	s.sessions[sessionToken] = sessionRecord{
 		lobsterID: lobsterID,
 		pubkey:    pubkeyBase64,
@@ -153,20 +157,18 @@ func (s *Service) Prove(pubkeyBase64, challenge, sigBase64 string) (sessionToken
 }
 
 func (s *Service) GetSession(token string) (lobsterID string, pubkey string, ok bool) {
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.clock.Now()
+	s.cleanupExpiredLocked(now)
 	rec, ok := s.sessions[token]
 	if !ok {
-		s.mu.RUnlock()
 		return "", "", false
 	}
-	if s.clock.Now().After(rec.expiresAt) {
-		s.mu.RUnlock()
-		s.mu.Lock()
+	if now.After(rec.expiresAt) {
 		delete(s.sessions, token)
-		s.mu.Unlock()
 		return "", "", false
 	}
-	s.mu.RUnlock()
 	return rec.lobsterID, rec.pubkey, true
 }
 
@@ -185,4 +187,17 @@ func deriveLobsterID(pub ed25519.PublicKey) string {
 	sum := sha256.Sum256(pub)
 	// Compact, stable, human-visible.
 	return fmt.Sprintf("lobster_%x", sum[:6]) // 12 hex chars
+}
+
+func (s *Service) cleanupExpiredLocked(now time.Time) {
+	for k, rec := range s.challenges {
+		if now.After(rec.expiresAt) {
+			delete(s.challenges, k)
+		}
+	}
+	for k, rec := range s.sessions {
+		if now.After(rec.expiresAt) {
+			delete(s.sessions, k)
+		}
+	}
 }
