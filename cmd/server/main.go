@@ -21,6 +21,7 @@ func main() {
 	app := gateway.NewAppWithOptions(gateway.AppOptions{
 		Shock: gateway.ShockConfigFromEnv(),
 		TrustedProxyCIDRs: gateway.TrustedProxyCIDRsFromEnv(),
+		// IntentAcceptTimeout: keep default unless explicitly tuned later.
 	})
 
 	srv := &http.Server{
@@ -33,6 +34,7 @@ func main() {
 	}
 
 	log.Printf("lobster-world-core server listening on %s", addr)
+	log.Printf("runtime: shock_enabled=%v trusted_proxy_cidrs=%v", app.Sim != nil && app.Sim.Config().Shock != nil, gateway.TrustedProxyCIDRsFromEnv())
 
 	// Serve in background so we can handle shutdown signals.
 	errCh := make(chan error, 1)

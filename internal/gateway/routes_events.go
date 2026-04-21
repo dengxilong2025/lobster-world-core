@@ -53,12 +53,14 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
+		// Subscribe BEFORE sending the first bytes to the client, so callers that connect
+		// and immediately post intents don't miss initial events due to a race.
+		ch, unsub := hub.Subscribe(256)
+		defer unsub()
+
 		// Initial comment to establish stream.
 		_, _ = w.Write([]byte(":ok\n\n"))
 		flusher.Flush()
-
-		ch, unsub := hub.Subscribe(256)
-		defer unsub()
 
 		bw := bufio.NewWriter(w)
 

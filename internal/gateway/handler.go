@@ -69,6 +69,7 @@ func NewHandler(opts Options) http.Handler {
 	registerReplayRoutes(mux, es, sp, sm)
 	registerAssetRoutes(mux)
 	registerUIRoutes(mux)
+	registerDebugRoutes(mux, sm, opts.TrustedProxyCIDRs)
 
 	return mux
 }

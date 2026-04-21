@@ -48,6 +48,10 @@ type AppOptions struct {
 	// MaxIntentQueue bounds the number of pending intents per world (safety valve).
 	MaxIntentQueue int
 
+	// IntentAcceptTimeout bounds how long SubmitIntent waits for durable acceptance.
+	// If 0, sim defaults are used (currently 2s).
+	IntentAcceptTimeout time.Duration
+
 	// TrustedProxyCIDRs configures reverse proxies that are allowed to set X-Forwarded-For.
 	// If empty, only loopback proxies are trusted (safe default).
 	TrustedProxyCIDRs []string
@@ -70,6 +74,7 @@ func NewAppWithOptions(opts AppOptions) *App {
 		EventStore:   a.EventStore,
 		Hub:          a.Hub,
 		TickInterval: opts.TickInterval,
+		IntentAcceptTimeout: opts.IntentAcceptTimeout,
 		Shock:        opts.Shock,
 		Seed:         opts.Seed,
 		MaxIntentQueue: opts.MaxIntentQueue,
