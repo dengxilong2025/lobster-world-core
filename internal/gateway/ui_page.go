@@ -94,7 +94,10 @@ const uiPageHTML = `<!doctype html>
         a.href = API_HIGHLIGHT + '?world_id=' + encodeURIComponent(worldId) + '&event_id=' + encodeURIComponent(eventId);
         a.target = '_blank';
         a.rel = 'noreferrer';
-        a.textContent = label || ('replay ' + eventId);
+        // Hide internal ids from viewers, but keep them available for tooling/debugging.
+        a.dataset.eventId = eventId;
+        a.title = eventId;
+        a.textContent = label || ('replay');
         li.appendChild(a);
         replaysEl.insertBefore(li, replaysEl.firstChild);
         // keep only recent N
@@ -127,7 +130,7 @@ const uiPageHTML = `<!doctype html>
           try {
             const obj = JSON.parse(ev.data);
             if (obj && obj.event_id) {
-              const title = (obj.narrative || obj.type || 'event') + '（' + obj.event_id + '）';
+              const title = (obj.narrative || obj.type || 'event');
               addReplayLink(worldId, obj.event_id, title);
             }
           } catch (_) {}
@@ -175,6 +178,17 @@ const uiPageHTML = `<!doctype html>
           const autoconnect = (qs.get('autoconnect') || '').trim();
           if (wid) $('world_id').value = wid;
           if (goal) $('goal').value = goal;
+          // UX: if the URL doesn't specify world_id, auto connect to the default world.
+          // This makes "open /ui" immediately show the world moving.
+          if (!wid) {
+            const def = $('world_id').value.trim();
+            if (def) {
+              setStatus('连接中...');
+              connectSSE(def);
+              fetchHome(def).catch(() => {});
+            }
+            return;
+          }
           if (wid && (autoconnect === '1' || autoconnect === 'true')) {
             connectSSE(wid);
             fetchHome(wid).catch(() => {});

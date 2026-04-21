@@ -53,6 +53,10 @@ func TestUI_ServesHTML(t *testing.T) {
 	if !strings.Contains(body, "/api/v0/replay/highlight") {
 		t.Fatalf("expected page references replay/highlight endpoint")
 	}
+	// Replay link text should not expose internal event_id; keep it in data-* for tooling.
+	if !strings.Contains(body, "dataset.eventId") {
+		t.Fatalf("expected /ui stores event_id in dataset for replay links")
+	}
 	// /ui should support query params for agentic usage (world_id/goal) and optional autoconnect.
 	// We assert code presence rather than full browser execution.
 	if !strings.Contains(body, "URLSearchParams") {
@@ -60,6 +64,10 @@ func TestUI_ServesHTML(t *testing.T) {
 	}
 	if !strings.Contains(body, "autoconnect") {
 		t.Fatalf("expected /ui supports autoconnect param")
+	}
+	// UX: when no world_id param is provided, UI should auto connect to default world.
+	if !strings.Contains(body, "if (!wid)") {
+		t.Fatalf("expected /ui autoconnects when no world_id provided")
 	}
 
 	// Export entrypoint should be discoverable from UI (v0.2 requirement).
