@@ -68,13 +68,10 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 			if err == nil {
 				for _, e := range missed {
 					b, _ := json.Marshal(e)
-					_, _ = bw.WriteString("event: message\n")
-					_, _ = bw.WriteString("data: ")
-					_, _ = bw.Write(b)
-					_, _ = bw.WriteString("\n\n")
+					if err := writeSSEMessage(bw, flusher, b); err != nil {
+						return
+					}
 				}
-				_ = bw.Flush()
-				flusher.Flush()
 			}
 		}
 
@@ -90,14 +87,10 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 					continue
 				}
 				b, _ := json.Marshal(e)
-				_, _ = bw.WriteString("event: message\n")
-				_, _ = bw.WriteString("data: ")
-				_, _ = bw.Write(b)
-				_, _ = bw.WriteString("\n\n")
-				_ = bw.Flush()
-				flusher.Flush()
+				if err := writeSSEMessage(bw, flusher, b); err != nil {
+					return
+				}
 			}
 		}
 	})
 }
-
