@@ -14,8 +14,8 @@
 ## 0) 总览
 
 - 当前里程碑：**v0.2-M1：Web 雏形（最低可玩）**
-- 当前总体完成度（估算）：**35%**
-- 当前状态（摘要）：已落地 `/ui` 单页壳（提交意图 / SSE / spectator.home / replay 链接）并补齐文档；下一步补“脚本化/批量智能体测试通道”和可部署方案。
+- 当前总体完成度（估算）：**55%**
+- 当前状态（摘要）：M1 已形成可玩闭环（/ui：提交意图 / SSE / spectator.home / replay/highlight / replay/export），并补齐使用手册；当前进入 M2：把“智能体批测通道”工程化（脚本/产物/失败原因）。
 
 ---
 
@@ -31,7 +31,7 @@
 | UI-06 | `/ui` 可脚本化 | 支持 `?world_id=...&goal=...&autoconnect=1` | DONE | 便于智能体批测 |
 | UI-07 | 冒烟集成测试 | `TestUI_ServesHTML` 覆盖关键 DOM 与 endpoints | DONE | `tests/integration/ui_smoke_test.go` |
 | UI-08 | 使用手册 | 人类最短路径 + 智能体 HTTP 测试路径 + 直达链接 | DONE | `docs/ui/v0_2_web_shell.md` |
-| UI-09 | replay/export 入口 | /ui 提供 export 入口（按钮或链接） | TODO | 还未接入 |
+| UI-09 | replay/export 入口 | /ui 提供 export 入口（按钮或链接） | DONE | `btn_export` |
 
 ---
 
@@ -39,9 +39,9 @@
 
 | ID | 任务 | 产出/验收标准 | 状态 | 备注 |
 |---|---|---|---|---|
-| AT-01 | 统一“智能体测试脚本” | 提供可重复运行脚本（或 Make target） | TODO | 产出指标/日志 |
+| AT-01 | 统一“智能体测试脚本” | 提供可重复运行脚本（或 Make target） | IN_PROGRESS | `scripts/agent_test_v0_2_m2.sh` |
 | AT-02 | 批量 world 管理 | 支持批量创建 world_id / 回收策略（文档即可） | TODO | 避免污染 |
-| AT-03 | 结果采集 | 每轮输出 replay/export（NDJSON）与失败原因 | TODO | 供回归对比 |
+| AT-03 | 结果采集 | 每轮输出 replay/export（NDJSON）与失败原因 | IN_PROGRESS | 与 AT-01 同步落地 |
 
 ---
 

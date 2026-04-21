@@ -166,6 +166,43 @@ curl -sS "http://localhost:8080/api/v0/replay/highlight?world_id=w1&event_id=<ev
 
 ---
 
+## 7) v0.2-M2：批量智能体测试脚本（推荐）
+
+仓库内提供了一个最小批测脚本，用于把“智能体测试路径”工程化：  
+**提交 intent → 拉取 home → 导出 NDJSON**，并把产物落盘，便于回归对比与第三方审计。
+
+脚本位置：
+- `scripts/agent_test_v0_2_m2.sh`
+
+### 7.1 运行方式
+
+先启动 server（本地或 docker compose 均可），然后在仓库根目录执行：
+
+```bash
+bash scripts/agent_test_v0_2_m2.sh --base-url http://localhost:8080 --world-id w1 --n 10
+```
+
+你也可以覆盖默认 goal 集合：
+
+```bash
+bash scripts/agent_test_v0_2_m2.sh --n 2 \
+  --goal "去狩猎获取食物" \
+  --goal "修建水渠缓解旱情"
+```
+
+### 7.2 产物目录（重要）
+
+脚本会生成：
+
+```
+out/agent_runs/<ts>/
+  intent_<i>.json + intent_<i>.status
+  home_<i>.json   + home_<i>.status
+  export_<i>.ndjson + export_<i>.status
+```
+
+其中 `export_*.ndjson` 可直接用于离线复现或作为第三方审计输入。
+
 ## 6) 常见问题（FAQ）
 
 ### Q1：/ui 上显示 SSE 连接中断？
