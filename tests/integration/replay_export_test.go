@@ -109,3 +109,87 @@ func TestReplayExport_ReturnsStableNDJSONSorted(t *testing.T) {
 		t.Fatalf("expected deterministic export output")
 	}
 }
+
+func TestReplayExport_EmptyWorld_Returns200AndEmptyBody(t *testing.T) {
+	t.Parallel()
+
+	app := gateway.NewAppWithOptions(gateway.AppOptions{TickInterval: 10 * time.Millisecond})
+	s := httptest.NewServer(app.Handler)
+	t.Cleanup(s.Close)
+
+	worldID := "w_empty_export"
+	resp, err := http.Get(s.URL + "/api/v0/replay/export?world_id=" + worldID)
+	if err != nil {
+		t.Fatalf("GET export: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	if len(bytes.TrimSpace(b)) != 0 {
+		t.Fatalf("expected empty body, got %q", string(b))
+	}
+}
+
+func TestReplayExport_Limit_IsHonored(t *testing.T) {
+	t.Parallel()
+
+	app := gateway.NewAppWithOptions(gateway.AppOptions{
+		TickInterval: 10 * time.Millisecond,
+		Seed:         123,
+	})
+	s := httptest.NewServer(app.Handler)
+	t.Cleanup(s.Close)
+
+	worldID := "w_export_limit"
+	body, _ := json.Marshal(map[string]any{"world_id": worldID, "goal": "启动世界"})
+	for i := 0; i < 5; i++ {
+		r, err := http.Post(s.URL+"/api/v0/intents", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST /intents: %v", err)
+		}
+		r.Body.Close()
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	resp, err := http.Get(s.URL + "/api/v0/replay/export?world_id=" + worldID + "&limit=3")
+	if err != nil {
+		t.Fatalf("GET export: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	sc := bufio.NewScanner(resp.Body)
+	n := 0
+	for sc.Scan() {
+		if len(bytes.TrimSpace(sc.Bytes())) == 0 {
+			continue
+		}
+		n++
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if n > 3 {
+		t.Fatalf("expected <=3 events, got %d", n)
+	}
+}
+
+func TestReplayExport_Limit_NonPositive_IsRejected(t *testing.T) {
+	t.Parallel()
+
+	app := gateway.NewAppWithOptions(gateway.AppOptions{TickInterval: 10 * time.Millisecond})
+	s := httptest.NewServer(app.Handler)
+	t.Cleanup(s.Close)
+
+	resp, err := http.Get(s.URL + "/api/v0/replay/export?world_id=w1&limit=0")
+	if err != nil {
+		t.Fatalf("GET export: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}

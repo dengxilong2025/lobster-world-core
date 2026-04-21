@@ -92,9 +92,16 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 
 		limit := 5000
 		if v := strings.TrimSpace(q.Get("limit")); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
-				limit = n
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid limit")
+				return
 			}
+			if n <= 0 {
+				writeError(w, http.StatusBadRequest, "BAD_REQUEST", "limit must be > 0")
+				return
+			}
+			limit = n
 		}
 
 		events, err := es.Query(store.Query{WorldID: worldID, SinceTs: 0, Limit: limit})
