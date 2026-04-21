@@ -73,6 +73,14 @@ func TestReplayExport_ReturnsStableNDJSONSorted(t *testing.T) {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
+		// Ensure export format versioning exists (backward compatible: only adds fields).
+		var meta map[string]any
+		if err := json.Unmarshal(line, &meta); err != nil {
+			t.Fatalf("invalid json line: %v line=%q", err, string(line))
+		}
+		if v, ok := meta["export_schema_version"]; !ok || v == nil {
+			t.Fatalf("expected export_schema_version field")
+		}
 		var e spec.Event
 		if err := json.Unmarshal(line, &e); err != nil {
 			t.Fatalf("invalid json line: %v line=%q", err, string(line))

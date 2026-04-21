@@ -117,11 +117,19 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 		})
 
 		w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+		// Export format versioning (backward compatible: we only ADD fields to each event JSON object).
+		w.Header().Set("X-LW-Export-Schema-Version", "1")
 		w.WriteHeader(http.StatusOK)
 		enc := json.NewEncoder(w)
 		for _, e := range events {
 			// Each Encode writes exactly one JSON object + newline (NDJSON).
-			_ = enc.Encode(e)
+			_ = enc.Encode(struct {
+				spec.Event
+				ExportSchemaVersion int `json:"export_schema_version"`
+			}{
+				Event:               e,
+				ExportSchemaVersion: 1,
+			})
 		}
 	})
 }
