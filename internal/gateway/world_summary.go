@@ -71,21 +71,29 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 	if st.State.Trust <= 25 {
 		bullets = append(bullets, "风险：互不信任蔓延")
 	}
-	if len(bullets) < 3 {
-		bullets = append(bullets, "建议：继续提交意图推动世界叙事")
-	} else {
-		// Add one action hint based on stage.
+	// Action hint: make it concrete and operational (v0 UX).
+	actionHint := func(stage string) string {
 		switch stage {
 		case "饥荒":
-			bullets = append(bullets, "建议：优先补给与秩序恢复")
+			return "建议：提交一个“补给/狩猎”意图，优先抬升食物并避免秩序塌陷"
 		case "战乱":
-			bullets = append(bullets, "建议：结盟/谈判或做好冲突升级准备")
+			return "建议：提交一个“停战/结盟/谈判”意图，测试阵营重组与信任阈值"
 		case "失序":
-			bullets = append(bullets, "建议：稳定秩序，避免连锁崩溃")
+			return "建议：提交一个“整顿/裁决/执法”意图，稳定秩序以避免连锁崩溃"
+		case "启蒙":
+			return "建议：提交一个“研究/教育/制度”意图，推动知识跃迁并观察副作用"
+		case "扩张":
+			return "建议：提交一个“迁徙/建设/外交”意图，放大扩张带来的外部摩擦"
 		default:
-			bullets = append(bullets, "建议：推进关键意图，制造戏剧性节点")
+			return "建议：提交一个“探索/贸易/合作”意图，推动世界叙事进入下一节点"
 		}
 	}
+	hint := actionHint(stage)
+	// Avoid accidental semantic duplication between hook and hint (rare but cheap to guard).
+	if strings.TrimSpace(strings.TrimPrefix(hook, "看点：")) == strings.TrimSpace(strings.TrimPrefix(hint, "建议：")) {
+		hint = "建议：提交一个意图推动世界叙事（观察事件链如何扩散）"
+	}
+	bullets = append(bullets, hint)
 
 	// Deduplicate (just in case).
 	seen := map[string]struct{}{}

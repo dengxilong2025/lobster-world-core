@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"testing"
+	"strings"
 
 	"lobster-world-core/internal/sim"
 )
@@ -60,3 +61,30 @@ func TestDeriveWorldSummary_StagePriority_TableDriven(t *testing.T) {
 	}
 }
 
+func TestDeriveWorldSummary_ActionHint_IsActionableAndNotDuplicateOfHook(t *testing.T) {
+	t.Parallel()
+
+	ws := deriveWorldSummary(sim.Status{
+		Tick:  10,
+		State: sim.WorldState{Food: 8, Population: 120, Order: 10, Trust: 20, Knowledge: 10, Conflict: 10},
+	}, []string{"粮仓见底", "有人偷粮"})
+
+	var hook, hint string
+	for _, b := range ws.Summary {
+		if strings.HasPrefix(b, "看点：") {
+			hook = b
+		}
+		if strings.HasPrefix(b, "建议：") {
+			hint = b
+		}
+	}
+	if hook == "" || hint == "" {
+		t.Fatalf("expected both hook and hint present: hook=%q hint=%q summary=%v", hook, hint, ws.Summary)
+	}
+	if !strings.Contains(hint, "提交") {
+		t.Fatalf("expected actionable hint to mention 提交, got %q", hint)
+	}
+	if strings.TrimPrefix(hook, "看点：") == strings.TrimPrefix(hint, "建议：") {
+		t.Fatalf("expected hint not to duplicate hook: hook=%q hint=%q", hook, hint)
+	}
+}
