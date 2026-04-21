@@ -35,10 +35,11 @@
   - `Home`：生成 headline + hot_events（优先 tick-based half-life）
   - `Entity`：关系视图（结盟/背叛）与“为什么强/下一风险”提示
 
+> 备注：`Apply` 可能先于第一次 `EnsureLoaded` 发生（例如服务启动后马上有新事件），Projection 仍会在首次 `EnsureLoaded` 时从 EventStore 回填历史并与已到达的 live events 合并，避免“只看到新事件看不到旧历史”的读模型缺口。
+
 ## 6. HTTP Gateway
 - 位置：`internal/gateway`
 - 拆分：`routes_*.go` 负责路由注册，`handler.go` 负责依赖注入
 - 防打爆：
   - auth IP 限速（429）
   - intents 背压（503 BUSY）
-

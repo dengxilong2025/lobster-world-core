@@ -61,6 +61,11 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Adoption:   adoption.NewService(adoption.Options{}),
 	}
 	a.Spectator = spectator.New(spectator.Options{EventStore: a.EventStore})
+
+	// Best-effort prewarm for the default world so the first spectator request doesn't pay the
+	// cold-start rebuild cost (useful once EventStore persists across restarts).
+	go func() { _ = a.Spectator.EnsureLoaded(DefaultWorldID) }()
+
 	a.Sim = sim.New(sim.Options{
 		EventStore:   a.EventStore,
 		Hub:          a.Hub,
