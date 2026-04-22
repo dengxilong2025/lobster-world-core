@@ -26,5 +26,5 @@
 
 ## 阶段 4（工程化/上线准备：待定）
 - [x] 指标与可观测性（debug/metrics：请求总量、状态码分布、BUSY 计数）
-- [ ] 压测脚本与基准（auth/intents/sse）
+- [x] 压测脚本与基准（auth/intents/sse/export：bash+curl，非 CI）
 - [x] replay/export 的稳定格式与版本化
