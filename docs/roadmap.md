@@ -22,7 +22,7 @@
 - [x] replay/highlight 蝴蝶效应增强（trace + cause narrative）
 - [x] v0.3-M1 最小剧本层：外交/贸易事件（alliance_formed / treaty_signed / trade_agreement）
 - [x] spectator 首页“世界阶段/状态摘要”：行动建议优先（关键词+预期事件类型）
-- [ ] 更稳定的“冲击期脚本化回放”（beats 结构更一致）
+- [x] 更稳定的“冲击期脚本化回放”（shock 生命周期 beats 结构更一致）
 
 ## 阶段 4（工程化/上线准备：待定）
 - [ ] 指标与可观测性（请求、队列、tick 延迟、事件写入失败）
