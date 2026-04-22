@@ -136,3 +136,66 @@ func TestDeriveWorldSummary_ActionHint_WarMentionsDiplomacyAndExpectedEvent(t *t
 		t.Fatalf("expected war hint to mention diplomacy keywords and alliance_formed/treaty_signed, got summary=%v", ws.Summary)
 	}
 }
+
+func TestDeriveWorldSummary_ActionHint_FoodRisk_HasBackupSupplyHint(t *testing.T) {
+	t.Parallel()
+
+	// Food risk but not stage=="饥荒" (food > 10). We still want a backup supply hint
+	// so the player has a clear second lever besides trade.
+	ws := deriveWorldSummary(sim.Status{
+		Tick:  10,
+		State: sim.WorldState{Food: 15, Population: 120, Order: 50, Trust: 50, Knowledge: 10, Conflict: 10},
+	}, []string{"粮仓见底"})
+
+	hints := make([]string, 0, 2)
+	for _, b := range ws.Summary {
+		if strings.HasPrefix(b, "建议：") {
+			hints = append(hints, b)
+		}
+	}
+	if len(hints) < 2 {
+		t.Fatalf("expected at least 2 hints (primary+backup) under food risk, got %v", hints)
+	}
+	found := false
+	for _, h := range hints {
+		if strings.Contains(h, "补给") || strings.Contains(h, "狩猎") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected backup hint to mention 补给/狩猎 under food risk, got %v", hints)
+	}
+}
+
+func TestDeriveWorldSummary_ActionHint_ConflictRisk_HasBackupDiplomacyHint(t *testing.T) {
+	t.Parallel()
+
+	// Conflict risk but not stage=="战乱" (conflict < 70). We still want a backup diplomacy hint
+	// so the player can keep pushing the story layer deterministically.
+	ws := deriveWorldSummary(sim.Status{
+		Tick:  10,
+		State: sim.WorldState{Food: 50, Population: 120, Order: 50, Trust: 40, Knowledge: 10, Conflict: 65},
+	}, []string{"边境冲突升级"})
+
+	hints := make([]string, 0, 2)
+	for _, b := range ws.Summary {
+		if strings.HasPrefix(b, "建议：") {
+			hints = append(hints, b)
+		}
+	}
+	if len(hints) < 2 {
+		t.Fatalf("expected at least 2 hints (primary+backup) under conflict risk, got %v", hints)
+	}
+	found := false
+	for _, h := range hints {
+		if strings.Contains(h, "备选外交") &&
+			(strings.Contains(h, "alliance_formed") || strings.Contains(h, "treaty_signed")) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected backup diplomacy hint to mention alliance_formed/treaty_signed under conflict risk, got %v", hints)
+	}
+}
