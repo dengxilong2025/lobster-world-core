@@ -72,36 +72,55 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 		bullets = append(bullets, "风险：互不信任蔓延")
 	}
 	// Action hints (v0.3+): keep them actionable, and mention expected story events when applicable.
+	primaryKind := ""
 	primaryHint := func() string {
 		// Risk priority: food -> conflict -> trust -> order -> stage/default.
 		switch {
 		case st.State.Food <= 20:
+			primaryKind = "food"
 			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
 		case st.State.Conflict >= 60:
+			primaryKind = "conflict"
 			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict"
 		case st.State.Trust <= 25:
+			primaryKind = "trust"
 			return "建议：优先修复信任——提交“结盟/联盟/合作/互助”意图，观察 alliance_formed（或 trade_agreement）是否出现并抬升 trust"
 		case st.State.Order <= 20:
+			primaryKind = "order"
 			return "建议：优先稳秩序——提交“整顿/裁决/执法/议会”意图，观察 order 是否回升并避免连锁崩溃"
 		}
 		switch stage {
 		case "饥荒":
 			// If we are in famine stage but not below the hard risk threshold, still steer toward trade.
+			primaryKind = "food"
 			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
 		case "战乱":
+			primaryKind = "conflict"
 			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict"
 		case "失序":
+			primaryKind = "order"
 			return "建议：提交一个“整顿/裁决/执法”意图，稳定秩序以避免连锁崩溃"
 		case "启蒙":
+			primaryKind = "default"
 			return "建议：提交一个“研究/教育/制度”意图，推动知识跃迁并观察副作用"
 		case "扩张":
+			primaryKind = "default"
 			return "建议：提交一个“迁徙/建设/外交”意图，放大扩张带来的外部摩擦"
 		default:
+			primaryKind = "default"
 			return "建议：提交一个“探索/贸易/合作”意图，推动世界叙事进入下一节点"
 		}
 	}
 	secondaryHint := func() string {
 		joined := strings.Join(recent, "；")
+		// If we picked a primary risk-based hint, always provide a backup lever.
+		// This keeps the UI actionable even when stage thresholds are not crossed yet.
+		switch primaryKind {
+		case "food":
+			return "建议：备选补给——提交“补给/狩猎”意图，观察 food 回升并避免秩序塌陷"
+		case "conflict":
+			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向"
+		}
 		// Prefer diplomacy in war / betrayal contexts to leverage story events.
 		if stage == "战乱" || strings.Contains(joined, "背叛") || strings.Contains(joined, "翻脸") {
 			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向"
