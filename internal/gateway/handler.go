@@ -28,6 +28,11 @@ type Options struct {
 // NewHandler returns the root HTTP handler for the service.
 // This is the main wiring point for HTTP endpoints.
 func NewHandler(opts Options) http.Handler {
+	// Metrics (debug/ops): initialized per handler wiring.
+	// Note: we keep a package-level pointer so writeError can tag BUSY without changing all signatures.
+	mt := NewMetrics()
+	setDefaultMetrics(mt)
+
 	a := opts.Auth
 	if a == nil {
 		a = auth.NewService(auth.Options{})
@@ -69,7 +74,31 @@ func NewHandler(opts Options) http.Handler {
 	registerReplayRoutes(mux, es, sp, sm)
 	registerAssetRoutes(mux)
 	registerUIRoutes(mux)
-	registerDebugRoutes(mux, sm, opts.TrustedProxyCIDRs)
+	registerDebugRoutes(mux, sm, opts.TrustedProxyCIDRs, mt)
 
-	return mux
+	// Wrap mux to capture status codes for metrics.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mt.IncRequest()
+		srw := &statusCapturingResponseWriter{ResponseWriter: w, status: 200}
+		mux.ServeHTTP(srw, r)
+		mt.IncStatus(srw.status)
+	})
+}
+
+type statusCapturingResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusCapturingResponseWriter) WriteHeader(statusCode int) {
+	w.status = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+// Flush forwards http.Flusher when supported by the underlying writer.
+// This is required for SSE endpoints.
+func (w *statusCapturingResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }

@@ -7,7 +7,7 @@ import (
 	"lobster-world-core/internal/sim"
 )
 
-func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs []string) {
+func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs []string, mt *Metrics) {
 	mux.HandleFunc("GET /api/v0/debug/config", func(w http.ResponseWriter, r *http.Request) {
 		cfg := map[string]any{
 			"trusted_proxy_cidrs": trustedProxyCIDRs,
@@ -42,5 +42,15 @@ func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs [
 			"config": cfg,
 		})
 	})
-}
 
+	mux.HandleFunc("GET /api/v0/debug/metrics", func(w http.ResponseWriter, r *http.Request) {
+		snap := map[string]any{}
+		if mt != nil {
+			snap = mt.Snapshot()
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"metrics": snap,
+		})
+	})
+}
