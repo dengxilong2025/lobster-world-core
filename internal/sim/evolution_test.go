@@ -22,7 +22,8 @@ func TestWorldStep_AppliesNaturalEvolutionWhenIdle(t *testing.T) {
 	w.mu.Unlock()
 
 	// Evolution is emitted only after several consecutive idle ticks.
-	for i := 0; i < 5; i++ {
+	// With the time-based cadence (default tickInterval=5s), this is 6 idle ticks (~30s).
+	for i := 0; i < 6; i++ {
 		w.step()
 	}
 

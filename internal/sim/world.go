@@ -211,7 +211,18 @@ func (w *world) step() {
 		// (tests and replay), but still keeps the world alive when idle.
 		if !shockEmitted {
 			w.idleTicks++
-			const evolveEveryIdleTicks = 5
+			// Evolve based on elapsed wall-time via tickInterval, but without using time.Now
+			// so the timeline remains deterministic for a given tick stream.
+			//
+			// In tests we often use very small tick intervals (e.g. 10ms). If we evolved every
+			// few ticks, replay/export snapshots would change between back-to-back requests,
+			// making determinism assertions flaky. Using a time-based cadence keeps the world
+			// "alive" in production while remaining stable in fast-tick tests.
+			const evolveEvery = 30 * time.Second
+			evolveEveryIdleTicks := int64(evolveEvery / w.tickInterval)
+			if evolveEveryIdleTicks < 5 {
+				evolveEveryIdleTicks = 5
+			}
 			if w.idleTicks >= evolveEveryIdleTicks {
 				if typ, narr, delta, ok := w.evolveLocked(); ok {
 					pre := w.state
