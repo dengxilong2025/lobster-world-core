@@ -7,6 +7,7 @@ type EngineConfig struct {
 	TickInterval        time.Duration `json:"-"`
 	IntentAcceptTimeout time.Duration `json:"-"`
 	MaxIntentQueue      int
+	IntentChannelCap    int
 	Shock               *ShockConfig // nil when disabled
 }
 
@@ -25,7 +26,7 @@ func (e *Engine) Config() EngineConfig {
 		TickInterval:        e.tickInterval,
 		IntentAcceptTimeout: e.intentAcceptTimeout,
 		MaxIntentQueue:      e.maxIntentQueue,
+		IntentChannelCap:    e.intentChannelCap,
 		Shock:               shockCopy,
 	}
 }
-

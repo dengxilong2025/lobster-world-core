@@ -47,12 +47,15 @@ type queuedIntent struct {
 	AcceptedEventID string
 }
 
-func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, hub *stream.Hub, maxQueue int) *world {
+func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, hub *stream.Hub, maxQueue int, intentChCap int) *world {
 	if tickInterval <= 0 {
 		tickInterval = 5 * time.Second
 	}
 	if maxQueue <= 0 {
 		maxQueue = 1024
+	}
+	if intentChCap < 0 {
+		intentChCap = 256
 	}
 	return &world{
 		worldID:      worldID,
@@ -64,7 +67,7 @@ func newWorld(worldID string, tickInterval time.Duration, es store.EventStore, h
 		tsSeq:        0,
 		maxQueue:     maxQueue,
 		idleTicks:    0,
-		intentCh:     make(chan queuedIntent, 256),
+		intentCh:     make(chan queuedIntent, intentChCap),
 		stopCh:       make(chan struct{}),
 		state: WorldState{
 			// Start from a small but non-zero baseline so spectator views feel alive.

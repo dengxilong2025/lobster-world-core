@@ -18,6 +18,7 @@ func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs [
 			cfg["tick_interval_ms"] = int64(ec.TickInterval / time.Millisecond)
 			cfg["intent_accept_timeout_ms"] = int64(ec.IntentAcceptTimeout / time.Millisecond)
 			cfg["max_intent_queue"] = ec.MaxIntentQueue
+			cfg["intent_channel_cap"] = ec.IntentChannelCap
 
 			if ec.Shock != nil {
 				cfg["shock_enabled"] = true

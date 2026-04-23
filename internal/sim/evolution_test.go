@@ -10,7 +10,7 @@ func TestWorldStep_AppliesNaturalEvolutionWhenIdle(t *testing.T) {
 	t.Parallel()
 
 	es := store.NewInMemoryEventStore()
-	w := newWorld("w_evo", 0, es, nil, 10)
+	w := newWorld("w_evo", 0, es, nil, 10, 256)
 
 	// Force an "idle but unstable" world.
 	w.mu.Lock()

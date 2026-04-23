@@ -10,7 +10,7 @@ func TestIntentRules_MapsGoalsToDeltas(t *testing.T) {
 	t.Parallel()
 
 	es := store.NewInMemoryEventStore()
-	w := newWorld("w1", 0, es, nil, 10)
+	w := newWorld("w1", 0, es, nil, 10, 256)
 
 	// Submit an intent that should affect food.
 	qi := queuedIntent{

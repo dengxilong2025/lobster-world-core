@@ -53,6 +53,10 @@ type AppOptions struct {
 	// If 0, sim defaults are used (currently 2s).
 	IntentAcceptTimeout time.Duration
 
+	// IntentChannelCap controls the per-world submission channel capacity.
+	// nil means default (256). 0 means unbuffered (useful for deterministic tests).
+	IntentChannelCap *int
+
 	// TrustedProxyCIDRs configures reverse proxies that are allowed to set X-Forwarded-For.
 	// If empty, only loopback proxies are trusted (safe default).
 	TrustedProxyCIDRs []string
@@ -83,6 +87,7 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Shock:        opts.Shock,
 		Seed:         opts.Seed,
 		MaxIntentQueue: opts.MaxIntentQueue,
+		IntentChannelCap: opts.IntentChannelCap,
 	})
 
 	// Keep spectator projection realtime by subscribing to the in-process hub.

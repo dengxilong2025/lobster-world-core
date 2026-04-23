@@ -63,9 +63,14 @@ uname_a="$(uname -a 2>/dev/null || true)"
   echo
   echo '```'
   echo
+  echo "## busy_by_reason（摘要）"
+  echo
+  echo '```'
+  curl -s "${BASE_URL}/api/v0/debug/metrics" | python3 -c 'import sys, json; d=json.load(sys.stdin); print(d.get("metrics", {}).get("busy_by_reason", {}))'
+  echo '```'
+  echo
 } >"$tmp"
 
 mv "$tmp" "$out_file"
 
 echo "Wrote ${out_file}"
-

@@ -25,6 +25,7 @@ type Engine struct {
 	shock        *ShockConfig
 	seed         int64
 	maxIntentQueue int
+	intentChannelCap int
 
 	worlds map[string]*world
 	stopped bool
@@ -43,6 +44,9 @@ type Options struct {
 	// MaxIntentQueue bounds the number of pending intents in a world (accepted but not executed yet).
 	// This is a safety valve to prevent unbounded memory growth under burst traffic.
 	MaxIntentQueue int
+	// IntentChannelCap configures the capacity of the per-world submission channel.
+	// nil means default (256). 0 means unbuffered (useful for deterministic tests).
+	IntentChannelCap *int
 }
 
 func New(opts Options) *Engine {
@@ -58,6 +62,13 @@ func New(opts Options) *Engine {
 	if mq <= 0 {
 		mq = 1024
 	}
+	chCap := 256
+	if opts.IntentChannelCap != nil {
+		chCap = *opts.IntentChannelCap
+		if chCap < 0 {
+			chCap = 256
+		}
+	}
 	return &Engine{
 		es:           opts.EventStore,
 		hub:          opts.Hub,
@@ -66,6 +77,7 @@ func New(opts Options) *Engine {
 		shock:        opts.Shock,
 		seed:         opts.Seed,
 		maxIntentQueue: mq,
+		intentChannelCap: chCap,
 		worlds:       map[string]*world{},
 		stopped:      false,
 	}
@@ -81,7 +93,7 @@ func (e *Engine) EnsureWorld(worldID string) {
 	if _, ok := e.worlds[worldID]; ok {
 		return
 	}
-	w := newWorld(worldID, e.tickInterval, e.es, e.hub, e.maxIntentQueue)
+	w := newWorld(worldID, e.tickInterval, e.es, e.hub, e.maxIntentQueue, e.intentChannelCap)
 	w.setSeed(deriveWorldSeed(e.seed, worldID))
 	if e.shock != nil {
 		w.setShockScheduler(newShockScheduler(*e.shock, w.seed, 0))
