@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "date": "2026-04-23",
+    "sha": "940d905",
+    "base_url": "http://localhost:8080",
+    "go_version": "/bin/sh: 1: go: not found",
+    "uname": "Linux work-30-4scqb 6.18.5 #1 SMP Wed Jan 28 20:01:07 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+    "threshold_regression_pct": 10
+  },
+  "tests": {
+    "auth_challenge": {
+      "duration_sec": 1.354,
+      "total": 200,
+      "qps": 147.71,
+      "avg_time_sec": 0.0009
+    },
+    "intents": {
+      "duration_sec": 4.544,
+      "total": 500,
+      "qps": 110.04,
+      "avg_time_sec": 0.0025,
+      "busy_503": 0,
+      "status_counts": {
+        "200": 500
+      }
+    },
+    "replay_export": {
+      "duration_sec": 0.417,
+      "total": 50,
+      "qps": 119.9,
+      "avg_time_sec": 0.002,
+      "avg_bytes": 161568.0,
+      "status_counts": {
+        "200": 50
+      }
+    }
+  },
+  "snapshots": {
+    "debug_config": {
+      "intent_accept_timeout_ms": 2000,
+      "intent_channel_cap": 256,
+      "max_intent_queue": 1024,
+      "shock_enabled": false,
+      "tick_interval_ms": 5000,
+      "trusted_proxy_cidrs": null
+    },
+    "debug_metrics": {
+      "busy_by_reason": {
+        "accept_timeout": 0,
+        "intent_ch_full": 0,
+        "pending_queue_full": 0
+      },
+      "world_queue_stats": {
+        "w_bench_940d905": {
+          "intent_ch_len": 0,
+          "intent_ch_cap": 256,
+          "pending_queue_len": 500,
+          "pending_queue_max": 1024,
+          "tick": 0
+        }
+      },
+      "world_tick_stats": {
+        "w_bench_940d905": {
+          "tick_count_total": 0,
+          "tick_last_unix_ms": 0,
+          "tick_jitter_ms_total": 0,
+          "tick_jitter_count": 0,
+          "tick_overrun_total": 0
+        }
+      },
+      "responses_by_status": {
+        "200": 551,
+        "400": 4,
+        "429": 196
+      }
+    }
+  }
+}
