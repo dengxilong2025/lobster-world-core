@@ -24,8 +24,10 @@ seq "$CONNECTIONS" | xargs -P "$CONNECTIONS" -I{} bash -c '
   # timeout exit code: 124 means timed out (expected).
   tmp2="$(mktemp)"
   # Use awk so we never fail on "0 matches", and capture timeout exit code via PIPESTATUS[0].
+  set +e
   timeout "'"$DURATION_SEC"'s" curl -sN "$url" | awk '\''/^data: /{c++} END{print c+0}'\'' > "$tmp2"
   rc=${PIPESTATUS[0]}
+  set -e
   out=$(cat "$tmp2")
   rm -f "$tmp2"
   echo "$rc $out"
