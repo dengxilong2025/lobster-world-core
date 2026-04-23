@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def _pct_change(cur: float, base: float) -> float | None:
@@ -20,21 +20,40 @@ def _get_test(d: Dict[str, Any], name: str) -> Dict[str, Any]:
     return (d.get("tests") or {}).get(name) or {}
 
 
-def _metric_row(name: str, cur: float | None, base: float | None, bad_when: str, threshold: int) -> Tuple[str, bool]:
+def _metric_row(
+    metric: str,
+    cur: float | int | None,
+    base: float | int | None,
+    bad_when: Optional[str],
+    threshold: int,
+) -> Tuple[List[str], bool]:
     """
-    bad_when: 'decrease' for QPS, 'increase' for AVG_TIME
+    Returns: [metric, baseline, current, delta, verdict], regression?
+    bad_when: 'decrease' for QPS, 'increase' for AVG_TIME, or None for no verdict.
     """
     if cur is None or base is None:
-        return f"- {name}: n/a", False
-    pct = _pct_change(cur, base)
+        return [metric, "n/a", "n/a", "n/a", "—"], False
+    cur_f = float(cur)
+    base_f = float(base)
+    pct = _pct_change(cur_f, base_f)
     flag = False
-    if pct is not None:
+    if pct is not None and bad_when is not None:
         if bad_when == "decrease" and pct <= -threshold:
             flag = True
         if bad_when == "increase" and pct >= threshold:
             flag = True
-    label = "REGRESSION" if flag else "OK"
-    return f"- {name}: {base} → {cur} ({_fmt_pct(pct)}) [{label}]", flag
+    verdict = "REGRESSION" if flag else ("OK" if bad_when is not None else "—")
+    return [metric, str(base), str(cur), _fmt_pct(pct), verdict], flag
+
+
+def _table(rows: List[List[str]]) -> str:
+    # Markdown table: assume 5 columns.
+    out: List[str] = []
+    out.append("| metric | baseline | current | delta | verdict |")
+    out.append("|---|---:|---:|---:|---|")
+    for r in rows:
+        out.append(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} | {r[4]} |")
+    return "\n".join(out)
 
 
 def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pct: int = 10) -> str:
@@ -50,19 +69,32 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
         base = _get_test(baseline, test_name)
         lines.append(f"## {test_name}")
         lines.append("")
+        rows: List[List[str]] = []
 
-        row, reg = _metric_row("qps", cur.get("qps"), base.get("qps"), "decrease", threshold_pct)
-        lines.append(row)
-        any_reg = any_reg or reg
-        row, reg = _metric_row(
-            "avg_time_sec", cur.get("avg_time_sec"), base.get("avg_time_sec"), "increase", threshold_pct
-        )
-        lines.append(row)
+        r, reg = _metric_row("qps", cur.get("qps"), base.get("qps"), "decrease", threshold_pct)
+        rows.append(r)
         any_reg = any_reg or reg
 
-        # Always show busy_503 if present
+        r, reg = _metric_row("avg_time_sec", cur.get("avg_time_sec"), base.get("avg_time_sec"), "increase", threshold_pct)
+        rows.append(r)
+        any_reg = any_reg or reg
+
+        # Always show busy_503 if present (no verdict)
         if "busy_503" in cur or "busy_503" in base:
-            lines.append(f"- busy_503: {base.get('busy_503','n/a')} → {cur.get('busy_503','n/a')}")
+            r, _ = _metric_row("busy_503", cur.get("busy_503"), base.get("busy_503"), None, threshold_pct)
+            r[3] = "—"
+            r[4] = "—"
+            rows.append(r)
+
+        # status summary (200/429/503)
+        cur_sc = cur.get("status_counts") or {}
+        base_sc = base.get("status_counts") or {}
+        if cur_sc or base_sc:
+            def fmt(sc: Dict[str, Any]) -> str:
+                return f"{int(sc.get('200',0))}/{int(sc.get('429',0))}/{int(sc.get('503',0))}"
+            rows.append(["status 200/429/503", fmt(base_sc), fmt(cur_sc), "—", "—"])
+
+        lines.append(_table(rows))
         lines.append("")
 
     # busy_by_reason
@@ -82,4 +114,3 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
         lines.append("")
 
     return "\n".join(lines)
-
