@@ -1,0 +1,11 @@
+== loadtest_auth_challenge ==
+BASE_URL=http://localhost:8080
+CONCURRENCY=10
+REQUESTS=200
+DURATION_SEC=0.318
+ TOTAL=200
+ QPS≈628.93
+ AVG_TIME_SEC=0.0016
+ STATUS_COUNTS:
+   200 200
+

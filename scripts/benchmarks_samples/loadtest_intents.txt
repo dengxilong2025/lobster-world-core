@@ -1,0 +1,15 @@
+== loadtest_intents ==
+BASE_URL=http://localhost:8080
+WORLD_ID=w_bench_abcdef1
+CONCURRENCY=50
+REQUESTS=500
+GOAL=启动世界
+DURATION_SEC=4.411
+ TOTAL=500
+ QPS≈113.35
+ AVG_TIME_SEC=0.0024
+ STATUS_COUNTS:
+   200 480
+   503 20
+ BUSY_503=20
+
