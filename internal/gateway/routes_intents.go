@@ -9,7 +9,7 @@ import (
 	"lobster-world-core/internal/sim"
 )
 
-func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine) {
+func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine, mt *Metrics) {
 	// Minimal intent endpoint (v0 placeholder executor).
 	mux.HandleFunc("POST /api/v0/intents", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -43,6 +43,9 @@ func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine) {
 		})
 		if err != nil {
 			if errors.Is(err, sim.ErrBusy) {
+				if mt != nil {
+					mt.IncBusy()
+				}
 				writeError(w, http.StatusServiceUnavailable, "BUSY", "world is busy")
 				return
 			}
@@ -58,4 +61,3 @@ func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine) {
 		})
 	})
 }
-

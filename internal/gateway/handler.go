@@ -19,6 +19,7 @@ type Options struct {
 	Adoption   *adoption.Service
 	Spectator  *spectator.Projection
 	Sim        *sim.Engine
+	Metrics    *Metrics
 
 	// TrustedProxyCIDRs configures reverse proxies that are allowed to set X-Forwarded-For.
 	// If empty, only loopback proxies are trusted (safe default).
@@ -29,9 +30,10 @@ type Options struct {
 // This is the main wiring point for HTTP endpoints.
 func NewHandler(opts Options) http.Handler {
 	// Metrics (debug/ops): initialized per handler wiring.
-	// Note: we keep a package-level pointer so writeError can tag BUSY without changing all signatures.
-	mt := NewMetrics()
-	setDefaultMetrics(mt)
+	mt := opts.Metrics
+	if mt == nil {
+		mt = NewMetrics()
+	}
 
 	a := opts.Auth
 	if a == nil {
@@ -41,6 +43,7 @@ func NewHandler(opts Options) http.Handler {
 	if es == nil {
 		es = store.NewInMemoryEventStore()
 	}
+	es = wrapEventStoreWithMetrics(es, mt)
 	hub := opts.Hub
 	if hub == nil {
 		hub = stream.NewHub()
@@ -67,11 +70,11 @@ func NewHandler(opts Options) http.Handler {
 
 	registerHealthRoutes(mux)
 	registerAuthRoutes(mux, a, authLimiter, trusted)
-	registerEventRoutes(mux, es, hub)
-	registerIntentRoutes(mux, sm)
+	registerEventRoutes(mux, es, hub, mt)
+	registerIntentRoutes(mux, sm, mt)
 	registerAdoptionRoutes(mux, a, ad, es, hub)
 	registerSpectatorRoutes(mux, sp, sm)
-	registerReplayRoutes(mux, es, sp, sm)
+	registerReplayRoutes(mux, es, sp, sm, mt)
 	registerAssetRoutes(mux)
 	registerUIRoutes(mux)
 	registerDebugRoutes(mux, sm, opts.TrustedProxyCIDRs, mt)

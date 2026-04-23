@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,9 +18,28 @@ type neighborStore interface {
 	GetNeighbors(worldID, eventID string, radius int) (prev, next spec.Event, okPrev, okNext bool, err error)
 }
 
-func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator.Projection, sm *sim.Engine) {
+func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator.Projection, sm *sim.Engine, mt *Metrics) {
 	// Replay highlight (MVP): return a structured "script replay" for 30s.
 	mux.HandleFunc("GET /api/v0/replay/highlight", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		if mt != nil {
+			mt.IncReplayHighlight()
+		}
+		okResp := false
+		defer func() {
+			if mt == nil {
+				return
+			}
+			ms := time.Since(start).Milliseconds()
+			if ms == 0 {
+				ms = 1
+			}
+			mt.AddReplayHighlightTimeMs(ms)
+			if !okResp {
+				mt.IncReplayHighlightError()
+			}
+		}()
+
 		q := r.URL.Query()
 		worldID := q.Get("world_id")
 		eventID := q.Get("event_id")
@@ -78,11 +98,33 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 			"duration_sec": 30,
 			"beats":        beats,
 		})
+		okResp = true
 	})
 
 	// Replay export (MVP): export canonical event log as NDJSON for deterministic replay/debugging.
 	// Output is sorted by (ts asc, event_id asc).
 	mux.HandleFunc("GET /api/v0/replay/export", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		if mt != nil {
+			mt.IncReplayExport()
+		}
+		okResp := false
+		var bytesWritten int64
+		defer func() {
+			if mt == nil {
+				return
+			}
+			ms := time.Since(start).Milliseconds()
+			if ms == 0 {
+				ms = 1
+			}
+			mt.AddReplayExportTimeMs(ms)
+			mt.AddReplayExportBytes(bytesWritten)
+			if !okResp {
+				mt.IncReplayExportError()
+			}
+		}()
+
 		q := r.URL.Query()
 		worldID := q.Get("world_id")
 		if worldID == "" {
@@ -120,7 +162,8 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 		// Export format versioning (backward compatible: we only ADD fields to each event JSON object).
 		w.Header().Set("X-LW-Export-Schema-Version", "1")
 		w.WriteHeader(http.StatusOK)
-		enc := json.NewEncoder(w)
+		cw := &countingWriter{w: w, n: 0}
+		enc := json.NewEncoder(cw)
 		for _, e := range events {
 			// Each Encode writes exactly one JSON object + newline (NDJSON).
 			_ = enc.Encode(struct {
@@ -131,7 +174,22 @@ func registerReplayRoutes(mux *http.ServeMux, es store.EventStore, sp *spectator
 				ExportSchemaVersion: 1,
 			})
 		}
+		bytesWritten = cw.n
+		okResp = true
 	})
+}
+
+type countingWriter struct {
+	w http.ResponseWriter
+	n int64
+}
+
+func (w *countingWriter) Header() http.Header { return w.w.Header() }
+func (w *countingWriter) WriteHeader(statusCode int) { w.w.WriteHeader(statusCode) }
+func (w *countingWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	w.n += int64(n)
+	return n, err
 }
 
 func buildReplayBeats(worldID string, target spec.Event, prev, next *spec.Event, es store.EventStore, sp *spectator.Projection, sm *sim.Engine) []map[string]any {

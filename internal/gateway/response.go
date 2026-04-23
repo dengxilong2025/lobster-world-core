@@ -30,12 +30,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, msg string) {
-	// Metrics: treat BUSY as a first-class signal (queue backpressure).
-	if code == "BUSY" {
-		if mt := getDefaultMetrics(); mt != nil {
-			mt.IncBusy()
-		}
-	}
 	writeJSON(w, status, map[string]any{
 		"ok": false,
 		"error": map[string]any{

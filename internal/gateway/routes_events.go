@@ -9,7 +9,7 @@ import (
 	"lobster-world-core/internal/events/stream"
 )
 
-func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hub) {
+func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hub, mt *Metrics) {
 	mux.HandleFunc("GET /api/v0/events", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		worldID := q.Get("world_id")
@@ -57,6 +57,14 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 		// and immediately post intents don't miss initial events due to a race.
 		ch, unsub := hub.Subscribe(256)
 		defer unsub()
+		if mt != nil {
+			mt.IncSSEConnectionsTotal()
+			mt.AddSSEConnectionsCurrent(1)
+			defer func() {
+				mt.AddSSEConnectionsCurrent(-1)
+				mt.IncSSEDisconnectsTotal()
+			}()
+		}
 
 		// Initial comment to establish stream.
 		_, _ = w.Write([]byte(":ok\n\n"))
@@ -91,6 +99,9 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 				b, _ := json.Marshal(e)
 				if err := writeSSEMessage(bw, flusher, b); err != nil {
 					return
+				}
+				if mt != nil {
+					mt.IncSSEDataMessagesTotal()
 				}
 			}
 		}

@@ -23,6 +23,7 @@ type App struct {
 	Adoption   *adoption.Service
 	Spectator  *spectator.Projection
 	Sim        *sim.Engine
+	Metrics    *Metrics
 
 	stopOnce  sync.Once
 	hubUnsub  func()
@@ -58,11 +59,15 @@ type AppOptions struct {
 }
 
 func NewAppWithOptions(opts AppOptions) *App {
+	mt := NewMetrics()
+	es := wrapEventStoreWithMetrics(store.NewInMemoryEventStore(), mt)
+
 	a := &App{
 		Auth:       auth.NewService(auth.Options{}),
-		EventStore: store.NewInMemoryEventStore(),
+		EventStore: es,
 		Hub:        stream.NewHub(),
 		Adoption:   adoption.NewService(adoption.Options{}),
+		Metrics:    mt,
 	}
 	a.Spectator = spectator.New(spectator.Options{EventStore: a.EventStore})
 
@@ -97,6 +102,7 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Adoption:   a.Adoption,
 		Spectator:  a.Spectator,
 		Sim:        a.Sim,
+		Metrics:    a.Metrics,
 		TrustedProxyCIDRs: opts.TrustedProxyCIDRs,
 	})
 	return a
