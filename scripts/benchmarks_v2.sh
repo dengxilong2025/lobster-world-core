@@ -13,7 +13,11 @@ sha="$(git rev-parse --short HEAD)"
 out_dir="docs/ops/benchmarks"
 mkdir -p "$out_dir"
 
+# Non-overwrite naming: if basename already exists, append _HHMMSS.
 base_path="${out_dir}/${date_ymd}_${sha}"
+if [[ -f "${base_path}.json" ]]; then
+  base_path="${base_path}_$(date +%H%M%S)"
+fi
 json_out="${base_path}.json"
 md_out="${base_path}.md"
 diff_out="${base_path}.diff.md"
@@ -24,10 +28,10 @@ trap cleanup EXIT
 
 echo "[bench v2] BASE_URL=${BASE_URL} sha=${sha} date=${date_ymd}"
 
-# baseline: pick the latest existing json (before writing current).
+# baseline: pick the latest existing json (before writing current), excluding current.
 baseline_json=""
 if ls "${out_dir}"/*.json >/dev/null 2>&1; then
-  baseline_json="$(ls "${out_dir}"/*.json | sort | tail -n 1)"
+  baseline_json="$(python3 ./scripts/benchmarks_baseline.py --out-dir "${out_dir}" --current "${json_out}" || true)"
 fi
 
 # Run loadtests (capture raw outputs).
@@ -156,6 +160,11 @@ cur = json.loads(Path(cur_p).read_text(encoding="utf-8"))
 base = json.loads(Path(base_p).read_text(encoding="utf-8"))
 threshold = int((cur.get("meta") or {}).get("threshold_regression_pct", 10))
 md = diff_summary(cur, base, threshold_pct=threshold)
+header = []
+header.append(f"- current: `{Path(cur_p).name}`")
+header.append(f"- baseline: `{Path(base_p).name}`")
+header.append("")
+md = "\n".join(header) + md
 Path(out_p).write_text(md + "\n", encoding="utf-8")
 PY
 else
@@ -170,4 +179,3 @@ echo "[bench v2] wrote:"
 echo "  - ${json_out}"
 echo "  - ${md_out}"
 echo "  - ${diff_out}"
-
