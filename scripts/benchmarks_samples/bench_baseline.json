@@ -1,0 +1,14 @@
+{
+  "meta": {"threshold_regression_pct": 10},
+  "tests": {
+    "auth_challenge": {"qps": 200.0, "avg_time_sec": 0.0010, "busy_503": 0, "status_counts": {"200": 200}},
+    "intents": {"qps": 120.0, "avg_time_sec": 0.0020, "busy_503": 0, "status_counts": {"200": 500}},
+    "replay_export": {"qps": 110.0, "avg_time_sec": 0.0020, "avg_bytes": 1000.0, "busy_503": 0, "status_counts": {"200": 50}}
+  },
+  "snapshots": {
+    "debug_metrics": {
+      "busy_by_reason": {"intent_ch_full": 0, "pending_queue_full": 0, "accept_timeout": 0}
+    }
+  }
+}
+
