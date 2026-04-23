@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"lobster-world-core/internal/sim"
 )
@@ -34,6 +35,7 @@ func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine, mt *Metrics) {
 			worldID = DefaultWorldID
 		}
 
+		start := time.Now()
 		intentID, err := sm.SubmitIntent(worldID, sim.Intent{
 			Goal:        req.Goal,
 			Constraints: req.Constraints,
@@ -51,6 +53,15 @@ func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine, mt *Metrics) {
 			}
 			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to persist intent")
 			return
+		}
+
+		if mt != nil {
+			ms := time.Since(start).Milliseconds()
+			if ms == 0 {
+				ms = 1
+			}
+			mt.AddIntentAcceptWaitMs(ms)
+			mt.IncIntentAcceptWaitCount()
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{

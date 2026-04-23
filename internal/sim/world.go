@@ -341,6 +341,18 @@ func (w *world) status() Status {
 	}
 }
 
+func (w *world) queueStats() QueueStat {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return QueueStat{
+		IntentChLen:     len(w.intentCh),
+		IntentChCap:     cap(w.intentCh),
+		PendingQueueLen: len(w.queue),
+		PendingQueueMax: w.maxQueue,
+		Tick:            w.tick,
+	}
+}
+
 var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
 func sanitize(s string) string {

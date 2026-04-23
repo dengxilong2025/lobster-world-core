@@ -15,6 +15,10 @@ type Metrics struct {
 	eventstoreAppendTotal       atomic.Int64
 	eventstoreAppendErrorsTotal atomic.Int64
 
+	// Intent acceptance wait time (gateway wall-clock, debug only).
+	intentAcceptWaitMsTotal atomic.Int64
+	intentAcceptWaitCount   atomic.Int64
+
 	// Replay export/highlight.
 	replayExportTotal      atomic.Int64
 	replayExportErrors     atomic.Int64
@@ -66,6 +70,16 @@ func (m *Metrics) IncEventStoreAppend() {
 
 func (m *Metrics) IncEventStoreAppendError() {
 	m.eventstoreAppendErrorsTotal.Add(1)
+}
+
+func (m *Metrics) AddIntentAcceptWaitMs(ms int64) {
+	if ms > 0 {
+		m.intentAcceptWaitMsTotal.Add(ms)
+	}
+}
+
+func (m *Metrics) IncIntentAcceptWaitCount() {
+	m.intentAcceptWaitCount.Add(1)
 }
 
 func (m *Metrics) IncReplayExport() {
@@ -124,6 +138,8 @@ func (m *Metrics) Snapshot() map[string]any {
 		"busy_total":     m.busyTotal.Load(),
 		"eventstore_append_total":        m.eventstoreAppendTotal.Load(),
 		"eventstore_append_errors_total": m.eventstoreAppendErrorsTotal.Load(),
+		"intent_accept_wait_ms_total":    m.intentAcceptWaitMsTotal.Load(),
+		"intent_accept_wait_count":       m.intentAcceptWaitCount.Load(),
 		"replay_export_total":            m.replayExportTotal.Load(),
 		"replay_export_errors_total":     m.replayExportErrors.Load(),
 		"replay_export_time_ms_total":    m.replayExportTimeMs.Load(),
