@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"lobster-world-core/internal/events/store"
 	"lobster-world-core/internal/events/stream"
@@ -57,17 +58,24 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 		// and immediately post intents don't miss initial events due to a race.
 		ch, unsub := hub.Subscribe(256)
 		defer unsub()
+		start := time.Now()
 		if mt != nil {
 			mt.IncSSEConnectionsTotal()
 			mt.AddSSEConnectionsCurrent(1)
+			mt.AddSSEConnectionsCurrentByWorld(worldID, 1)
 			defer func() {
+				mt.AddSSEConnectionsCurrentByWorld(worldID, -1)
 				mt.AddSSEConnectionsCurrent(-1)
 				mt.IncSSEDisconnectsTotal()
+				mt.ObserveSSEConnDurationMs(time.Since(start).Milliseconds())
 			}()
 		}
 
 		// Initial comment to establish stream.
-		_, _ = w.Write([]byte(":ok\n\n"))
+		n0, _ := w.Write([]byte(":ok\n\n"))
+		if mt != nil && n0 > 0 {
+			mt.AddSSEBytes(int64(n0))
+		}
 		flusher.Flush()
 
 		bw := bufio.NewWriter(w)
@@ -78,8 +86,16 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 			if err == nil {
 				for _, e := range missed {
 					b, _ := json.Marshal(e)
-					if err := writeSSEMessage(bw, flusher, b); err != nil {
+					n, err := writeSSEMessage(bw, flusher, b)
+					if err != nil {
+						if mt != nil {
+							mt.IncSSEFlushErrorsTotal()
+						}
 						return
+					}
+					if mt != nil {
+						mt.AddSSEBytes(n)
+						mt.IncSSEDataMessagesTotal()
 					}
 				}
 			}
@@ -97,10 +113,15 @@ func registerEventRoutes(mux *http.ServeMux, es store.EventStore, hub *stream.Hu
 					continue
 				}
 				b, _ := json.Marshal(e)
-				if err := writeSSEMessage(bw, flusher, b); err != nil {
+				n, err := writeSSEMessage(bw, flusher, b)
+				if err != nil {
+					if mt != nil {
+						mt.IncSSEFlushErrorsTotal()
+					}
 					return
 				}
 				if mt != nil {
+					mt.AddSSEBytes(n)
 					mt.IncSSEDataMessagesTotal()
 				}
 			}

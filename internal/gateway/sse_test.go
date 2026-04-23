@@ -26,8 +26,8 @@ func TestWriteSSEMessage_ReturnsErrorWhenUnderlyingWriterFails(t *testing.T) {
 
 	ew := &errWriter{fail: true}
 	bw := bufio.NewWriter(ew)
-	if err := writeSSEMessage(bw, noopFlusher{}, []byte(`{"ok":true}`)); err == nil {
+	_, err := writeSSEMessage(bw, noopFlusher{}, []byte(`{"ok":true}`))
+	if err == nil {
 		t.Fatalf("expected error")
 	}
 }
-

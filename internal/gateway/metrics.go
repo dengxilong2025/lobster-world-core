@@ -39,14 +39,24 @@ type Metrics struct {
 	sseConnectionsTotal   atomic.Int64
 	sseDisconnectsTotal   atomic.Int64
 	sseDataMessagesTotal  atomic.Int64
+	sseBytesTotal         atomic.Int64
+	sseFlushErrorsTotal   atomic.Int64
+
+	sseConnDurationMsTotal atomic.Int64
+	sseConnDurationCount   atomic.Int64
+	sseConnDurationMsMax   atomic.Int64
 
 	mu       sync.Mutex
 	byStatus map[int]*atomic.Int64
+
+	// Low-cardinality: current SSE connections by world_id.
+	sseByWorld map[string]int64
 }
 
 func NewMetrics() *Metrics {
 	return &Metrics{
 		byStatus: map[int]*atomic.Int64{},
+		sseByWorld: map[string]int64{},
 	}
 }
 
@@ -149,6 +159,47 @@ func (m *Metrics) IncSSEDataMessagesTotal() {
 	m.sseDataMessagesTotal.Add(1)
 }
 
+func (m *Metrics) AddSSEBytes(n int64) {
+	if n > 0 {
+		m.sseBytesTotal.Add(n)
+	}
+}
+
+func (m *Metrics) IncSSEFlushErrorsTotal() {
+	m.sseFlushErrorsTotal.Add(1)
+}
+
+func (m *Metrics) ObserveSSEConnDurationMs(ms int64) {
+	if ms < 0 {
+		return
+	}
+	m.sseConnDurationMsTotal.Add(ms)
+	m.sseConnDurationCount.Add(1)
+	for {
+		cur := m.sseConnDurationMsMax.Load()
+		if ms <= cur {
+			break
+		}
+		if m.sseConnDurationMsMax.CompareAndSwap(cur, ms) {
+			break
+		}
+	}
+}
+
+func (m *Metrics) AddSSEConnectionsCurrentByWorld(worldID string, delta int64) {
+	if worldID == "" || delta == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	v := m.sseByWorld[worldID] + delta
+	if v <= 0 {
+		delete(m.sseByWorld, worldID)
+		return
+	}
+	m.sseByWorld[worldID] = v
+}
+
 func (m *Metrics) Snapshot() map[string]any {
 	out := map[string]any{
 		"requests_total": m.requestsTotal.Load(),
@@ -173,14 +224,24 @@ func (m *Metrics) Snapshot() map[string]any {
 		"sse_connections_total":          m.sseConnectionsTotal.Load(),
 		"sse_disconnects_total":          m.sseDisconnectsTotal.Load(),
 		"sse_data_messages_total":        m.sseDataMessagesTotal.Load(),
+		"sse_bytes_total":               m.sseBytesTotal.Load(),
+		"sse_flush_errors_total":        m.sseFlushErrorsTotal.Load(),
+		"sse_conn_duration_ms_total":    m.sseConnDurationMsTotal.Load(),
+		"sse_conn_duration_count":       m.sseConnDurationCount.Load(),
+		"sse_conn_duration_ms_max":      m.sseConnDurationMsMax.Load(),
 	}
 	by := map[string]int64{}
 	m.mu.Lock()
 	for k, v := range m.byStatus {
 		by[itoa(k)] = v.Load()
 	}
+	sseByWorld := map[string]int64{}
+	for k, v := range m.sseByWorld {
+		sseByWorld[k] = v
+	}
 	m.mu.Unlock()
 	out["responses_by_status"] = by
+	out["sse_connections_current_by_world"] = sseByWorld
 	return out
 }
 
