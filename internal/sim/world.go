@@ -30,6 +30,8 @@ type world struct {
 	eventSeq  int64
 	intentSeq int64
 	queue     []queuedIntent
+	tickStat  TickStat
+	lastTickAt time.Time
 
 	intentCh chan queuedIntent
 	stopCh   chan struct{}
@@ -143,6 +145,28 @@ func (w *world) loop() {
 		case qi := <-w.intentCh:
 			w.handleIntent(qi)
 		case <-t.C:
+			// Wall-clock observability only (does NOT affect simulation decisions).
+			now := time.Now()
+			w.mu.Lock()
+			w.tickStat.TickCountTotal++
+			w.tickStat.TickLastUnixMs = now.UnixMilli()
+			if !w.lastTickAt.IsZero() {
+				actual := now.Sub(w.lastTickAt).Milliseconds()
+				expected := w.tickInterval.Milliseconds()
+				if expected > 0 {
+					d := actual - expected
+					if d < 0 {
+						d = -d
+					}
+					w.tickStat.TickJitterMsTotal += d
+					w.tickStat.TickJitterCount++
+					if actual >= 2*expected {
+						w.tickStat.TickOverrunTotal++
+					}
+				}
+			}
+			w.lastTickAt = now
+			w.mu.Unlock()
 			w.step()
 		}
 	}
@@ -354,6 +378,12 @@ func (w *world) queueStats() QueueStat {
 		PendingQueueMax: w.maxQueue,
 		Tick:            w.tick,
 	}
+}
+
+func (w *world) tickStats() TickStat {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.tickStat
 }
 
 var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9]+`)

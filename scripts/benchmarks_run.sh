@@ -69,6 +69,12 @@ uname_a="$(uname -a 2>/dev/null || true)"
   curl -s "${BASE_URL}/api/v0/debug/metrics" | python3 -c 'import sys, json; d=json.load(sys.stdin); print(d.get("metrics", {}).get("busy_by_reason", {}))'
   echo '```'
   echo
+  echo "## world_tick_stats（摘要）"
+  echo
+  echo '```'
+  curl -s "${BASE_URL}/api/v0/debug/metrics" | python3 -c 'import sys, json; d=json.load(sys.stdin); print(d.get("metrics", {}).get("world_tick_stats", {}))'
+  echo '```'
+  echo
 } >"$tmp"
 
 mv "$tmp" "$out_file"

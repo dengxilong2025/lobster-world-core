@@ -51,6 +51,7 @@ func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs [
 		}
 		if sm != nil {
 			snap["world_queue_stats"] = sm.QueueStats()
+			snap["world_tick_stats"] = sm.TickStats()
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
