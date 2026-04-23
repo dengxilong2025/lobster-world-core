@@ -47,6 +47,17 @@ func registerIntentRoutes(mux *http.ServeMux, sm *sim.Engine, mt *Metrics) {
 			if errors.Is(err, sim.ErrBusy) {
 				if mt != nil {
 					mt.IncBusy()
+					var be sim.BusyError
+					if errors.As(err, &be) {
+						switch be.Reason {
+						case sim.BusyReasonIntentChFull:
+							mt.IncBusyIntentChFull()
+						case sim.BusyReasonPendingQueueFull:
+							mt.IncBusyPendingQueueFull()
+						case sim.BusyReasonAcceptTimeout:
+							mt.IncBusyAcceptTimeout()
+						}
+					}
 				}
 				writeError(w, http.StatusServiceUnavailable, "BUSY", "world is busy")
 				return

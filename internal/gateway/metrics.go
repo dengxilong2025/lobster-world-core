@@ -19,6 +19,11 @@ type Metrics struct {
 	intentAcceptWaitMsTotal atomic.Int64
 	intentAcceptWaitCount   atomic.Int64
 
+	// Busy breakdown (low cardinality).
+	busyIntentChFullTotal     atomic.Int64
+	busyPendingQueueFullTotal atomic.Int64
+	busyAcceptTimeoutTotal    atomic.Int64
+
 	// Replay export/highlight.
 	replayExportTotal      atomic.Int64
 	replayExportErrors     atomic.Int64
@@ -62,6 +67,18 @@ func (m *Metrics) IncStatus(code int) {
 
 func (m *Metrics) IncBusy() {
 	m.busyTotal.Add(1)
+}
+
+func (m *Metrics) IncBusyIntentChFull() {
+	m.busyIntentChFullTotal.Add(1)
+}
+
+func (m *Metrics) IncBusyPendingQueueFull() {
+	m.busyPendingQueueFullTotal.Add(1)
+}
+
+func (m *Metrics) IncBusyAcceptTimeout() {
+	m.busyAcceptTimeoutTotal.Add(1)
 }
 
 func (m *Metrics) IncEventStoreAppend() {
@@ -140,6 +157,11 @@ func (m *Metrics) Snapshot() map[string]any {
 		"eventstore_append_errors_total": m.eventstoreAppendErrorsTotal.Load(),
 		"intent_accept_wait_ms_total":    m.intentAcceptWaitMsTotal.Load(),
 		"intent_accept_wait_count":       m.intentAcceptWaitCount.Load(),
+		"busy_by_reason": map[string]any{
+			"intent_ch_full":     m.busyIntentChFullTotal.Load(),
+			"pending_queue_full": m.busyPendingQueueFullTotal.Load(),
+			"accept_timeout":     m.busyAcceptTimeoutTotal.Load(),
+		},
 		"replay_export_total":            m.replayExportTotal.Load(),
 		"replay_export_errors_total":     m.replayExportErrors.Load(),
 		"replay_export_time_ms_total":    m.replayExportTimeMs.Load(),

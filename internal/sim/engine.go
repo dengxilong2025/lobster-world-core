@@ -117,7 +117,7 @@ func (e *Engine) SubmitIntent(worldID string, in Intent) (intentID string, err e
 		}
 		return id, nil
 	case <-time.After(e.intentAcceptTimeout):
-		return "", fmt.Errorf("timeout waiting for intent acceptance")
+		return "", BusyError{Reason: BusyReasonAcceptTimeout}
 	}
 }
 

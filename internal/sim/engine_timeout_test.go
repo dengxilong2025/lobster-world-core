@@ -1,7 +1,7 @@
 package sim
 
 import (
-	"strings"
+	"errors"
 	"testing"
 	"time"
 
@@ -52,11 +52,14 @@ func TestEngine_SubmitIntent_UsesConfigurableAcceptTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected timeout error, got nil")
 	}
-	if !strings.Contains(err.Error(), "timeout waiting for intent acceptance") {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("expected ErrBusy, got %v", err)
+	}
+	var be BusyError
+	if !errors.As(err, &be) || be.Reason != BusyReasonAcceptTimeout {
+		t.Fatalf("expected BusyError accept_timeout, got %T %v", err, err)
 	}
 	if elapsed > 200*time.Millisecond {
 		t.Fatalf("expected timeout quickly, took %v", elapsed)
 	}
 }
-

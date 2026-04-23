@@ -123,7 +123,7 @@ func (w *world) submitIntent(in Intent) (string, <-chan error, error) {
 		// ok
 	default:
 		close(ack)
-		return "", nil, ErrBusy
+		return "", nil, BusyError{Reason: BusyReasonIntentChFull}
 	}
 	// Caller will wait on ack via Engine.
 	return id, ack, nil
@@ -153,7 +153,7 @@ func (w *world) handleIntent(qi queuedIntent) {
 	if w.maxQueue > 0 && len(w.queue) >= w.maxQueue {
 		if qi.Ack != nil {
 			select {
-			case qi.Ack <- ErrBusy:
+			case qi.Ack <- BusyError{Reason: BusyReasonPendingQueueFull}:
 			default:
 			}
 			close(qi.Ack)
