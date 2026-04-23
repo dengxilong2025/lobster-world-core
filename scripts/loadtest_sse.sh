@@ -22,8 +22,12 @@ seq "$CONNECTIONS" | xargs -P "$CONNECTIONS" -I{} bash -c '
   url="'"$BASE_URL"'/api/v0/events/stream?world_id='"$WORLD_ID"'"
   # Count SSE data lines as a proxy for event throughput.
   # timeout exit code: 124 means timed out (expected).
-  out=$(timeout "'"$DURATION_SEC"'s" bash -c "curl -sN \"$url\" | grep -c \"^data: \"" || true)
-  rc=$?
+  tmp2="$(mktemp)"
+  # Use awk so we never fail on "0 matches", and capture timeout exit code via PIPESTATUS[0].
+  timeout "'"$DURATION_SEC"'s" curl -sN "$url" | awk '\''/^data: /{c++} END{print c+0}'\'' > "$tmp2"
+  rc=${PIPESTATUS[0]}
+  out=$(cat "$tmp2")
+  rm -f "$tmp2"
   echo "$rc $out"
 ' >"$tmp"
 
@@ -43,4 +47,3 @@ awk '
 ' "$tmp"
 
 echo "Tip: exit code 124 is expected (timeout). Non-124 non-0 often indicates early disconnect."
-
