@@ -29,6 +29,7 @@ seq "$CONNECTIONS" | xargs -P "$CONNECTIONS" -I{} bash -c '
   out=$(cat "$tmp2")
   rm -f "$tmp2"
   echo "$rc $out"
+  exit 0
 ' >"$tmp"
 
 echo "RESULTS (per connection):"
