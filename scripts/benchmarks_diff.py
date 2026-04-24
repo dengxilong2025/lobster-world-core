@@ -145,6 +145,44 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
         lines.append(_table(rows))
         lines.append("")
 
+    # agent_batch (v2.3)
+    cur_ab = _get_test(current, "agent_batch")
+    base_ab = _get_test(baseline, "agent_batch")
+    if cur_ab or base_ab:
+        lines.append("## agent_batch")
+        lines.append("")
+        rows2: List[List[str]] = []
+
+        r, reg = _metric_row("duration_sec", cur_ab.get("duration_sec"), base_ab.get("duration_sec"), "increase", threshold_pct)
+        rows2.append(r)
+        any_reg = any_reg or reg
+
+        # fail_total: absolute increase is a regression (more intuitive than pct threshold)
+        b_fail = base_ab.get("fail_total")
+        c_fail = cur_ab.get("fail_total")
+        r, _ = _metric_row("fail_total", c_fail, b_fail, None, threshold_pct)
+        r[3] = "—"
+        # verdict: regression if cur > base (or base missing but cur > 0)
+        if isinstance(c_fail, (int, float)) and isinstance(b_fail, (int, float)):
+            r[4] = "REGRESSION" if int(c_fail) > int(b_fail) else "OK"
+        elif isinstance(c_fail, (int, float)) and int(c_fail) > 0:
+            r[4] = "REGRESSION"
+        else:
+            r[4] = "—"
+        rows2.append(r)
+        if r[4] == "REGRESSION":
+            any_reg = True
+
+        # show export volumes (no verdict)
+        for k in ["export_lines_total", "export_bytes_total"]:
+            r, _ = _metric_row(k, cur_ab.get(k), base_ab.get(k), None, threshold_pct)
+            r[3] = "—"
+            r[4] = "—"
+            rows2.append(r)
+
+        lines.append(_table(rows2))
+        lines.append("")
+
     # busy_by_reason
     cur_bbr = ((current.get("snapshots") or {}).get("debug_metrics") or {}).get("busy_by_reason") or {}
     base_bbr = ((baseline.get("snapshots") or {}).get("debug_metrics") or {}).get("busy_by_reason") or {}
