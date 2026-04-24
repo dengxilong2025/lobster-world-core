@@ -182,6 +182,11 @@ curl -sS "http://localhost:8080/api/v0/replay/highlight?world_id=w1&event_id=<ev
 bash scripts/agent_test_v0_2_m2.sh --base-url http://localhost:8080 --world-id w1 --n 10
 ```
 
+你也可以让脚本自动生成隔离的 world_id（避免批次互相污染）：
+```bash
+bash scripts/agent_test_v0_2_m2.sh --world-id auto --n 10
+```
+
 你也可以覆盖默认 goal 集合：
 
 ```bash
@@ -205,6 +210,7 @@ out/agent_runs/<ts>/
 
 此外脚本会输出一份汇总：
 - `summary.json`：成功/失败计数与失败原因（按 HTTP 状态码聚合）
+  - 以及 `duration_sec / export_lines_total / export_bytes_total / goals[]` 等辅助排障字段
 
 ---
 

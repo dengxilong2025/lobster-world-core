@@ -73,6 +73,9 @@ if [[ -z "${BASE_URL}" || -z "${WORLD_ID}" ]]; then
 fi
 
 TS="$(date +"%Y%m%d-%H%M%S")"
+if [[ "${WORLD_ID}" == "auto" ]]; then
+  WORLD_ID="agent_${TS}"
+fi
 RUN_DIR="${ROOT}/out/agent_runs/${TS}"
 mkdir -p "${RUN_DIR}"
 
@@ -81,6 +84,7 @@ log "world_id=${WORLD_ID}"
 log "n=${N}"
 log "export_limit=${EXPORT_LIMIT}"
 log "run_dir=${RUN_DIR}"
+start_epoch="$(date +%s)"
 
 declare -A fail_by_code=()
 declare -A ok_by_kind=()
@@ -114,6 +118,24 @@ PY
   fi
   # Minimal fallback: space -> %20 (good enough for our default world_id values).
   printf '%s' "$s" | sed 's/ /%20/g'
+}
+
+json_quote() {
+  # Return a JSON string literal (including quotes).
+  local s="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - <<PY
+import json
+print(json.dumps("""$s"""))
+PY
+    return 0
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$s" | jq -Rs .
+    return 0
+  fi
+  # Minimal fallback: escape backslash and double-quote.
+  printf '"%s"' "$(printf '%s' "$s" | sed 's/\\/\\\\/g; s/\"/\\"/g')"
 }
 
 post_intent() {
@@ -195,14 +217,37 @@ for ((i=1; i<=N; i++)); do
   sleep 0.2
 done
 
+end_epoch="$(date +%s)"
+duration_sec=$(( end_epoch - start_epoch ))
+
+export_lines_total=0
+export_bytes_total=0
+for f in "${RUN_DIR}"/export_*.ndjson; do
+  if [[ -f "$f" ]]; then
+    export_lines_total=$(( export_lines_total + $(wc -l < "$f" | tr -d ' ') ))
+    export_bytes_total=$(( export_bytes_total + $(wc -c < "$f" | tr -d ' ') ))
+  fi
+done
+
 summary_path="${RUN_DIR}/summary.json"
 {
   echo "{"
   echo "  \"run_id\": \"${TS}\","
+  echo "  \"duration_sec\": ${duration_sec},"
   echo "  \"base_url\": \"${BASE_URL}\","
   echo "  \"world_id\": \"${WORLD_ID}\","
   echo "  \"n\": ${N},"
   echo "  \"export_limit\": ${EXPORT_LIMIT},"
+  echo "  \"goals\": ["
+  for ((gi=0; gi<${#GOALS[@]}; gi++)); do
+    g="${GOALS[$gi]}"
+    if [[ "$gi" -gt 0 ]]; then echo ","; fi
+    printf "    %s" "$(json_quote "$g")"
+  done
+  if [[ "${#GOALS[@]}" -gt 0 ]]; then echo; fi
+  echo "  ],"
+  echo "  \"export_lines_total\": ${export_lines_total},"
+  echo "  \"export_bytes_total\": ${export_bytes_total},"
   echo "  \"ok\": {"
   echo "    \"intents\": ${ok_by_kind["intents"]:-0},"
   echo "    \"home\": ${ok_by_kind["home"]:-0},"
