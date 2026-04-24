@@ -3,7 +3,8 @@
   "tests": {
     "auth_challenge": {"qps": 150.0, "avg_time_sec": 0.0012, "busy_503": 0, "status_counts": {"200": 200}},
     "intents": {"world_id":"w_bench_abcdef1","qps": 95.0, "avg_time_sec": 0.0030, "busy_503": 10, "status_counts": {"200": 490, "503": 10}},
-    "replay_export": {"qps": 115.0, "avg_time_sec": 0.0021, "avg_bytes": 1100.0, "busy_503": 0, "status_counts": {"200": 50}}
+    "replay_export": {"qps": 115.0, "avg_time_sec": 0.0021, "avg_bytes": 1100.0, "busy_503": 0, "status_counts": {"200": 50}},
+    "agent_batch": {"duration_sec": 14, "fail_total": 2, "export_lines_total": 120, "export_bytes_total": 15000}
   },
   "snapshots": {
     "debug_metrics": {

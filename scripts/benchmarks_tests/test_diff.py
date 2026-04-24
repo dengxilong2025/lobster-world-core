@@ -18,6 +18,9 @@ class TestDiff(unittest.TestCase):
         self.assertIn("| qps |", md)
         self.assertIn("tick_overrun_total_sum:", md)
         self.assertIn("bench_world_pending_queue_len:", md)
+        self.assertIn("## agent_batch", md)
+        self.assertIn("| duration_sec |", md)
+        self.assertIn("| fail_total |", md)
         self.assertIn("REGRESSION", md)
 
 
