@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Local output artifacts
+out/
+review_bundle.zip
+lobster-world-core-*.zip
+lobster-world-core-project-*.zip
