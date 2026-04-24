@@ -13,9 +13,9 @@
 
 ## 0) 总览
 
-- 当前里程碑：**v0.2-M1：Web 雏形（最低可玩）**
-- 当前总体完成度（估算）：**55%**
-- 当前状态（摘要）：M1 已形成可玩闭环（/ui：提交意图 / SSE / spectator.home / replay/highlight / replay/export），并补齐使用手册；当前进入 M2：把“智能体批测通道”工程化（脚本/产物/失败原因）。
+- 当前里程碑：**v0.2-M2：智能体体验测试通道（工程化）**
+- 当前总体完成度（估算）：**80%**
+- 当前状态（摘要）：M1/M2 已形成“可玩闭环 + 可批测 + 可留档对比”的最小交付；benchmarks v2 已升级到 v2.4（含 agent_batch 与 Verdict 回归来源清单）。剩余主要工作集中在：部署固定地址（DEP-02）与后续 v0.3/v0.4 内容线。
 
 ---
 
@@ -54,6 +54,31 @@
 
 ---
 
-## 4) 更新记录（简版）
+## 4) QA/证据链：Benchmarks & Diff（给回归/审计用）
+
+> 目标：每次迭代都能留下可对比的证据：压测（QPS/latency）+ 批测（agent_batch）+ 解释性指标（tick/queue）+ 一眼可读的回归来源（Verdict breakdown）。
+
+| ID | 任务 | 产出/验收标准 | 状态 | 备注 |
+|---|---|---|---|---|
+| QA-01 | Benchmarks v2 归档 | 生成 `docs/ops/benchmarks/*.json/*.md/*.diff.md` | DONE | `scripts/benchmarks_v2.sh` |
+| QA-02 | diff 解释性指标 | diff 含 `tick_overrun_total_sum` 与 `bench_world_pending_queue_len` | DONE | v2.2 |
+| QA-03 | 纳入 agent_batch | benchmarks.json 含 `tests.agent_batch`；diff 含 `## agent_batch` | DONE | v2.3 |
+| QA-04 | Verdict breakdown | Verdict 输出回归条目清单与计数（含 agent_batch） | DONE | v2.4 |
+
+---
+
+## 5) 仓库卫生（Repo hygiene）
+
+| ID | 任务 | 产出/验收标准 | 状态 | 备注 |
+|---|---|---|---|---|
+| RH-01 | 忽略本地产物 | `.gitignore` 忽略 `out/` / 本地 zip 等 | DONE | 避免污染 git status |
+| RH-02 | 大文件策略（短期） | 规则明确；不强制 LFS | DONE | 后续若持续增长再迁移 |
+
+---
+
+## 6) 更新记录（简版）
 
 - 2026-04-19：落地 `/ui` Web 壳（提交意图/SSE/摘要/回放），增加 query params + autoconnect，并补齐使用手册。
+- 2026-04-23~24：benchmarks v2.2：diff 增加 tick/queue 摘要；完善样例/单测门禁并两次冒烟留档。
+- 2026-04-24：v0.2-M2 批测脚本工程化（`scripts/agent_test_v0_2_m2.sh`），并将批测纳入 benchmarks（v2.3 agent_batch）。
+- 2026-04-24：benchmarks v2.4：Verdict 输出回归条目清单与计数（明确回归来源）。
