@@ -109,8 +109,13 @@ def _table(rows: List[List[str]]) -> str:
     return "\n".join(out)
 
 
+def _fmt_reg_line(test: str, metric: str, base: Any, cur: Any, delta: str) -> str:
+    return f"- {test}.{metric}: {base} → {cur} ({delta})"
+
+
 def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pct: int = 10) -> str:
     lines: list[str] = []
+    regressions: List[str] = []
     lines.append("# Benchmarks Diff Summary")
     lines.append("")
     lines.append(f"- threshold_regression_pct: {threshold_pct}%")
@@ -127,10 +132,14 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
         r, reg = _metric_row("qps", cur.get("qps"), base.get("qps"), "decrease", threshold_pct)
         rows.append(r)
         any_reg = any_reg or reg
+        if reg:
+            regressions.append(_fmt_reg_line(test_name, "qps", r[1], r[2], r[3]))
 
         r, reg = _metric_row("avg_time_sec", cur.get("avg_time_sec"), base.get("avg_time_sec"), "increase", threshold_pct)
         rows.append(r)
         any_reg = any_reg or reg
+        if reg:
+            regressions.append(_fmt_reg_line(test_name, "avg_time_sec", r[1], r[2], r[3]))
 
         # Always show busy_503 if present (no verdict)
         if "busy_503" in cur or "busy_503" in base:
@@ -161,6 +170,8 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
         r, reg = _metric_row("duration_sec", cur_ab.get("duration_sec"), base_ab.get("duration_sec"), "increase", threshold_pct)
         rows2.append(r)
         any_reg = any_reg or reg
+        if reg:
+            regressions.append(_fmt_reg_line("agent_batch", "duration_sec", r[1], r[2], r[3]))
 
         # fail_total: absolute increase is a regression (more intuitive than pct threshold)
         b_fail = base_ab.get("fail_total")
@@ -177,6 +188,7 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
         rows2.append(r)
         if r[4] == "REGRESSION":
             any_reg = True
+            regressions.append(f"- agent_batch.fail_total: {r[1]} → {r[2]}")
 
         # show export volumes (no verdict)
         for k in ["export_lines_total", "export_bytes_total"]:
@@ -220,7 +232,15 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
     if any_reg:
         lines.append("## Verdict")
         lines.append("")
-        lines.append("REGRESSION detected.")
+        lines.append(f"REGRESSION detected ({len(regressions)}).")
+        lines.append("")
+        for s in regressions:
+            lines.append(s)
+        lines.append("")
+    else:
+        lines.append("## Verdict")
+        lines.append("")
+        lines.append("OK.")
         lines.append("")
 
     return "\n".join(lines)
