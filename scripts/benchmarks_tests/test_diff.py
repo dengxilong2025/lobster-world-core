@@ -21,6 +21,9 @@ class TestDiff(unittest.TestCase):
         self.assertIn("## agent_batch", md)
         self.assertIn("| duration_sec |", md)
         self.assertIn("| fail_total |", md)
+        self.assertIn("REGRESSION detected (", md)
+        self.assertIn("- intents.avg_time_sec:", md)
+        self.assertIn("- agent_batch.duration_sec:", md)
         self.assertIn("REGRESSION", md)
 
 
