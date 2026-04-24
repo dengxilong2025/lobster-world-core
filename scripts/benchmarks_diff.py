@@ -19,6 +19,54 @@ def _fmt_pct(p: float | None) -> str:
 def _get_test(d: Dict[str, Any], name: str) -> Dict[str, Any]:
     return (d.get("tests") or {}).get(name) or {}
 
+def _get_metrics(d: Dict[str, Any]) -> Dict[str, Any]:
+    return ((d.get("snapshots") or {}).get("debug_metrics") or {})
+
+
+def _sum_tick_overrun_total(d: Dict[str, Any]) -> Optional[int]:
+    m = _get_metrics(d)
+    wts = m.get("world_tick_stats") or {}
+    if not isinstance(wts, dict) or not wts:
+        return None
+    s = 0
+    found = False
+    for _, v in wts.items():
+        if not isinstance(v, dict):
+            continue
+        x = v.get("tick_overrun_total")
+        if isinstance(x, (int, float)):
+            s += int(x)
+            found = True
+    return s if found else None
+
+
+def _bench_world_id(d: Dict[str, Any]) -> Optional[str]:
+    intents = _get_test(d, "intents")
+    wid = intents.get("world_id")
+    if isinstance(wid, str) and wid:
+        return wid
+    sha = (d.get("meta") or {}).get("sha")
+    if isinstance(sha, str) and sha:
+        return f"w_bench_{sha}"
+    return None
+
+
+def _bench_pending_queue_len(d: Dict[str, Any]) -> Optional[int]:
+    wid = _bench_world_id(d)
+    if not wid:
+        return None
+    m = _get_metrics(d)
+    wqs = m.get("world_queue_stats") or {}
+    if not isinstance(wqs, dict):
+        return None
+    st = wqs.get(wid)
+    if not isinstance(st, dict):
+        return None
+    v = st.get("pending_queue_len")
+    if isinstance(v, (int, float)):
+        return int(v)
+    return None
+
 
 def _metric_row(
     metric: str,
@@ -105,6 +153,25 @@ def diff_summary(current: Dict[str, Any], baseline: Dict[str, Any], threshold_pc
     keys = sorted(set(cur_bbr.keys()) | set(base_bbr.keys()))
     for k in keys:
         lines.append(f"- {k}: {base_bbr.get(k, 0)} → {cur_bbr.get(k, 0)}")
+    lines.append("")
+
+    # Extra explanatory summaries (v2.2)
+    lines.append("## world_tick_stats summary")
+    lines.append("")
+    base_overrun = _sum_tick_overrun_total(baseline)
+    cur_overrun = _sum_tick_overrun_total(current)
+    lines.append(
+        f"tick_overrun_total_sum: {base_overrun if base_overrun is not None else 'n/a'} → {cur_overrun if cur_overrun is not None else 'n/a'}"
+    )
+    lines.append("")
+
+    lines.append("## queue depth summary")
+    lines.append("")
+    base_q = _bench_pending_queue_len(baseline)
+    cur_q = _bench_pending_queue_len(current)
+    lines.append(
+        f"bench_world_pending_queue_len: {base_q if base_q is not None else 'n/a'} → {cur_q if cur_q is not None else 'n/a'}"
+    )
     lines.append("")
 
     if any_reg:
