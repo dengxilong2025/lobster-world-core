@@ -79,8 +79,13 @@ def _metric_row(
     Returns: [metric, baseline, current, delta, verdict], regression?
     bad_when: 'decrease' for QPS, 'increase' for AVG_TIME, or None for no verdict.
     """
-    if cur is None or base is None:
+    # Allow one side missing: still show the available value, but skip delta/verdict.
+    if cur is None and base is None:
         return [metric, "n/a", "n/a", "n/a", "—"], False
+    if cur is None and base is not None:
+        return [metric, str(base), "n/a", "n/a", "—"], False
+    if cur is not None and base is None:
+        return [metric, "n/a", str(cur), "n/a", "—"], False
     cur_f = float(cur)
     base_f = float(base)
     pct = _pct_change(cur_f, base_f)
