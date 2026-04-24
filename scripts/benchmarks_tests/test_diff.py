@@ -16,6 +16,8 @@ class TestDiff(unittest.TestCase):
         md = diff_summary(cur, base, threshold_pct=10)
         self.assertIn("| metric | baseline | current | delta | verdict |", md)
         self.assertIn("| qps |", md)
+        self.assertIn("tick_overrun_total_sum:", md)
+        self.assertIn("bench_world_pending_queue_len:", md)
         self.assertIn("REGRESSION", md)
 
 
