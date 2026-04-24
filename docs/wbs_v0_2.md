@@ -50,7 +50,7 @@
 | ID | 任务 | 产出/验收标准 | 状态 | 备注 |
 |---|---|---|---|---|
 | DEP-01 | 一键启动 | docker compose 或单命令启动说明 | DONE | 已提供 Dockerfile + docker-compose.yml，并在 /ui 手册补充用法 |
-| DEP-02 | 固定可访问地址（可选） | staging URL 或可转发方式 | TODO | 依赖你的部署环境 |
+| DEP-02 | 固定可访问地址（可选） | staging URL 或可转发方式 | IN_PROGRESS | Render（Hobby/Free） |
 
 ---
 
