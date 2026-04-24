@@ -38,10 +38,29 @@ fi
 auth_out="${tmpdir}/auth.txt"
 intents_out="${tmpdir}/intents.txt"
 export_out="${tmpdir}/export.txt"
+agent_out="${tmpdir}/agent_batch.json"
 
 BASE_URL="$BASE_URL" CONCURRENCY=10 REQUESTS=200 ./scripts/loadtest_auth_challenge.sh >"$auth_out"
 BASE_URL="$BASE_URL" WORLD_ID="w_bench_${sha}" CONCURRENCY=50 REQUESTS=500 GOAL="启动世界" ./scripts/loadtest_intents.sh >"$intents_out"
 BASE_URL="$BASE_URL" WORLD_ID="w_bench_${sha}" CONCURRENCY=5 REQUESTS=50 LIMIT=5000 ./scripts/loadtest_replay_export.sh >"$export_out"
+
+# Optional: agent batch-run (v0.2-M2). Default enabled for v2.3: set RUN_AGENT=0 to skip.
+RUN_AGENT="${RUN_AGENT:-1}"
+AGENT_N="${AGENT_N:-3}"
+AGENT_EXPORT_LIMIT="${AGENT_EXPORT_LIMIT:-500}"
+if [[ "${RUN_AGENT}" == "1" ]]; then
+  echo "[bench v2] agent_batch: n=${AGENT_N} export_limit=${AGENT_EXPORT_LIMIT}"
+  set +e
+  BASE_URL="$BASE_URL" AGENT_N="$AGENT_N" AGENT_EXPORT_LIMIT="$AGENT_EXPORT_LIMIT" \
+    python3 ./scripts/benchmarks_agent_v0_2_m2.py --base-url "$BASE_URL" --n "$AGENT_N" --export-limit "$AGENT_EXPORT_LIMIT" --out "$agent_out"
+  rc=$?
+  set -e
+  if [[ "$rc" != "0" ]]; then
+    echo "[bench v2] agent_batch failed (rc=$rc), continuing (see ${agent_out})"
+  fi
+else
+  echo "[bench v2] agent_batch skipped (RUN_AGENT=0)"
+fi
 
 # Fetch snapshots.
 cfg_json="${tmpdir}/debug_config.json"
@@ -53,13 +72,13 @@ go_version="$(go version 2>/dev/null || true)"
 uname_a="$(uname -a 2>/dev/null || true)"
 
 # Build benchmark json.
-python3 - "$auth_out" "$intents_out" "$export_out" "$cfg_json" "$metrics_json" "$json_out" <<'PY'
+python3 - "$auth_out" "$intents_out" "$export_out" "$agent_out" "$cfg_json" "$metrics_json" "$json_out" <<'PY'
 import json, sys
 from pathlib import Path
 
 from scripts.benchmarks_parse import parse_loadtest_output
 
-auth_out, intents_out, export_out, cfg_json, metrics_json, json_out = sys.argv[1:]
+auth_out, intents_out, export_out, agent_out, cfg_json, metrics_json, json_out = sys.argv[1:]
 
 def read(p: str) -> str:
     return Path(p).read_text(encoding="utf-8", errors="replace")
@@ -92,6 +111,13 @@ out = {
         },
     },
 }
+
+try:
+    ap = Path(agent_out)
+    if ap.exists() and ap.stat().st_size > 0:
+        out["tests"]["agent_batch"] = json.loads(read(agent_out))
+except Exception:
+    pass
 
 Path(json_out).write_text(json.dumps(out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
@@ -128,6 +154,16 @@ def add_test(name: str):
 
 for n in ["auth_challenge","intents","replay_export"]:
     add_test(n)
+
+if tests.get("agent_batch") is not None:
+    lines.append("## agent_batch")
+    lines.append("")
+    ab = tests.get("agent_batch") or {}
+    # Show only a compact subset.
+    for k in ["duration_sec","fail_total","export_lines_total","export_bytes_total","world_id","n"]:
+        if k in ab:
+            lines.append(f"- {k}: {ab[k]}")
+    lines.append("")
 
 lines.append("## busy_by_reason")
 lines.append("")
