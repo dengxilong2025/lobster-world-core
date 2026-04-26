@@ -8,8 +8,8 @@ import (
 )
 
 type WorldSummary struct {
-	Stage   string   `json:"stage"`
-	Summary []string `json:"summary"`
+	Stage   string         `json:"stage"`
+	Summary []string       `json:"summary"`
 	State   map[string]any `json:"state"`
 }
 
@@ -81,7 +81,7 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
 		case st.State.Conflict >= 60:
 			primaryKind = "conflict"
-			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict"
+			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
 		case st.State.Trust <= 25:
 			primaryKind = "trust"
 			return "建议：优先修复信任——提交“结盟/联盟/合作/互助”意图，观察 alliance_formed（或 trade_agreement）是否出现并抬升 trust"
@@ -96,7 +96,7 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
 		case "战乱":
 			primaryKind = "conflict"
-			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict"
+			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
 		case "失序":
 			primaryKind = "order"
 			return "建议：提交一个“整顿/裁决/执法”意图，稳定秩序以避免连锁崩溃"
@@ -119,11 +119,11 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 		case "food":
 			return "建议：备选补给——提交“补给/狩猎”意图，观察 food 回升并避免秩序塌陷"
 		case "conflict":
-			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向"
+			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
 		}
 		// Prefer diplomacy in war / betrayal contexts to leverage story events.
 		if stage == "战乱" || strings.Contains(joined, "背叛") || strings.Contains(joined, "翻脸") {
-			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向"
+			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
 		}
 		if stage == "饥荒" {
 			return "建议：备选补给——提交“补给/狩猎”意图，观察 food 回升并避免秩序塌陷"
