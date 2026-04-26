@@ -32,6 +32,58 @@ log() { echo "[$(date +%H:%M:%S)] $*"; }
 ok() { echo "[OK] $*"; }
 fail() { echo "[FAIL] $*" >&2; }
 
+truncate() {
+  local max_chars="$1"
+  python3 - <<PY
+import sys
+data = sys.stdin.read()
+sys.stdout.write(data[: int("$max_chars")])
+if len(data) > int("$max_chars"):
+  sys.stdout.write("\\n...[truncated]...")
+PY
+}
+
+dump_debug() {
+  local build_url="${BASE_URL}/api/v0/debug/build"
+  local metrics_url="${BASE_URL}/api/v0/debug/metrics"
+
+  echo "--- debug/build ---" >&2
+  if build_out="$(curl -sS --max-time "${TIMEOUT_SEC}" "${build_url}" 2>&1)"; then
+    printf '%s' "${build_out}" | truncate 800 >&2
+    echo >&2
+  else
+    echo "[dump_debug] failed to fetch ${build_url}: ${build_out}" >&2
+  fi
+
+  echo "--- debug/metrics ---" >&2
+  if metrics_out="$(curl -sS --max-time "${TIMEOUT_SEC}" "${metrics_url}" 2>&1)"; then
+    printf '%s' "${metrics_out}" | truncate 1600 >&2
+    echo >&2
+
+    # Explicitly print busy summary for quick triage (especially for 503 BUSY).
+    if printf '%s' "${metrics_out}" | python3 - <<'PY' >/dev/null 2>&1
+import json, sys
+json.load(sys.stdin)
+PY
+    then
+      echo "--- debug/metrics.summary.busy ---" >&2
+      printf '%s' "${metrics_out}" | python3 - <<'PY' >&2 || true
+import json, sys
+obj = json.load(sys.stdin)
+print(obj.get("metrics", {}).get("summary", {}).get("busy", "<missing>"))
+PY
+    fi
+  else
+    echo "[dump_debug] failed to fetch ${metrics_url}: ${metrics_out}" >&2
+  fi
+}
+
+die() {
+  fail "$*"
+  dump_debug
+  exit 1
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
@@ -66,8 +118,7 @@ require_code() {
   local want="$2"
   local label="$3"
   if [[ "$got" != "$want" ]]; then
-    fail "${label}: expected ${want}, got ${got}"
-    return 1
+    die "${label}: expected ${want}, got ${got}"
   fi
   ok "${label}: ${got}"
 }
@@ -76,33 +127,30 @@ log "BASE_URL=${BASE_URL}"
 
 # 1) /healthz
 code="$(curl_code GET "${BASE_URL}/healthz")"
-require_code "$code" "200" "GET /healthz" || exit 1
+require_code "$code" "200" "GET /healthz"
 
 # 2) / should 302 to /ui
 hdr="$(curl_headers "${BASE_URL}/")"
 code="$(echo "$hdr" | tr -d '\r' | awk 'toupper($1) ~ /^HTTP\// {print $2}' | tail -n 1)"
 loc="$(echo "$hdr" | tr -d '\r' | awk 'tolower($1)=="location:" {print $2}' | tail -n 1)"
 if [[ -z "${code}" ]]; then
-  fail "GET /: failed to read headers"
-  exit 1
+  die "GET /: failed to read headers"
 fi
 if [[ "$code" != "302" ]]; then
-  fail "GET /: expected 302, got ${code}"
-  exit 1
+  die "GET /: expected 302, got ${code}"
 fi
 if [[ "$loc" != "/ui" ]]; then
-  fail "GET /: expected Location=/ui, got ${loc:-<empty>}"
-  exit 1
+  die "GET /: expected Location=/ui, got ${loc:-<empty>}"
 fi
 ok "GET /: 302 Location=/ui"
 
 # 3) /ui should be 200
 code="$(curl_code GET "${BASE_URL}/ui")"
-require_code "$code" "200" "GET /ui" || exit 1
+require_code "$code" "200" "GET /ui"
 
 # 4) manifest should be 200
 code="$(curl_code GET "${BASE_URL}/assets/production/manifest.json")"
-require_code "$code" "200" "GET /assets/production/manifest.json" || exit 1
+require_code "$code" "200" "GET /assets/production/manifest.json"
 
 # 5) minimal write loop: intents -> home -> export
 ts="$(date +%Y%m%d-%H%M%S)"
@@ -127,11 +175,13 @@ icode="$(curl -sS -o "$tmp_body" -w "%{http_code}" --max-time "${TIMEOUT_SEC}" \
 if [[ "$icode" != "200" ]]; then
   fail "POST /api/v0/intents: expected 200, got ${icode}"
   head -n 20 "$tmp_body" >&2 || true
+  dump_debug
   exit 1
 fi
 if ! grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "$tmp_body"; then
   fail "POST /api/v0/intents: response missing \"ok\":true"
   head -n 20 "$tmp_body" >&2 || true
+  dump_debug
   exit 1
 fi
 ok "POST /api/v0/intents: 200"
@@ -139,10 +189,10 @@ ok "POST /api/v0/intents: 200"
 wid_enc="$(urlencode "${world_id}")"
 home_url="${BASE_URL}/api/v0/spectator/home?world_id=${wid_enc}"
 code="$(curl_code GET "${home_url}")"
-require_code "$code" "200" "GET /api/v0/spectator/home" || exit 1
+require_code "$code" "200" "GET /api/v0/spectator/home"
 
 export_url="${BASE_URL}/api/v0/replay/export?world_id=${wid_enc}&limit=${EXPORT_LIMIT}"
 code="$(curl_code GET "${export_url}")"
-require_code "$code" "200" "GET /api/v0/replay/export" || exit 1
+require_code "$code" "200" "GET /api/v0/replay/export"
 
 echo "ALL OK"
