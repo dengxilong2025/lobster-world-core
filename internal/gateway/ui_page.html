@@ -9,22 +9,34 @@
       .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
       input, button { padding: 8px 10px; font-size: 14px; }
       button { cursor: pointer; }
-      pre { background: #f6f6f6; padding: 12px; border-radius: 8px; overflow: auto; max-height: 40vh; }
+      .panel { background: #f6f6f6; padding: 12px; border-radius: 8px; }
+      .events { background: #f6f6f6; padding: 12px; border-radius: 8px; overflow: auto; max-height: 40vh; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; line-height: 1.35; }
       ul { margin: 8px 0; padding-left: 20px; }
       .muted { color: #666; }
+      .btn-sm { padding: 6px 8px; font-size: 13px; }
+      .badge { display: inline-block; border: 1px solid transparent; border-radius: 999px; padding: 1px 8px; font-weight: 700; font-size: 12px; margin-right: 6px; }
+      .summary-highlight { background: #fff7ed; border-radius: 6px; padding: 2px 6px; }
     </style>
   </head>
   <body>
-    <h1>Lobster World（v0.2 Web 雏形）</h1>
+    <h1>Lobster World（v0 Web UI）</h1>
     <p class="muted">目标：提交意图 → 观战摘要 → 实时事件流（SSE）→ 回放入口</p>
 
     <div class="row">
       <label>world_id：<input id="world_id" placeholder="例如 w1" value="w1" /></label>
       <label>goal：<input id="goal" placeholder="例如 去狩猎获取食物" size="32" /></label>
       <button id="btn_intent">提交意图</button>
+      <button id="btn_demo_betrayal" class="btn-sm">触发背叛</button>
+      <button id="btn_demo_war" class="btn-sm">触发宣战</button>
       <button id="btn_connect">连接事件流</button>
       <button id="btn_export">导出回放（NDJSON）</button>
       <span id="status" class="muted"></span>
+    </div>
+
+    <div class="row panel" style="margin-top: 10px;">
+      <div><strong>Build</strong>：<span id="build_info" class="muted">（加载中...）</span></div>
+      <div><strong>Metrics</strong>：<span id="metrics_info" class="muted">（加载中...）</span></div>
+      <button id="btn_refresh_debug" class="btn-sm">刷新 build/metrics</button>
     </div>
 
     <h2>世界阶段</h2>
@@ -34,7 +46,7 @@
     <ul id="world_summary"></ul>
 
     <h2>事件流（最新）</h2>
-    <pre id="events"></pre>
+    <div id="events" class="events"></div>
 
     <h2>回放入口（最近事件）</h2>
     <ul id="replays"></ul>
@@ -46,6 +58,16 @@
       const API_HOME    = '/api/v0/spectator/home';
       const API_HIGHLIGHT = '/api/v0/replay/highlight';
       const API_EXPORT = '/api/v0/replay/export';
+      const API_DEBUG_BUILD = '/api/v0/debug/build';
+      const API_DEBUG_METRICS = '/api/v0/debug/metrics';
+
+      const EVENT_STYLES = {
+        betrayal:         { label: 'betrayal', color: '#b91c1c', bg: '#fee2e2', border: '#fecaca' },
+        war_started:      { label: 'war',      color: '#b45309', bg: '#ffedd5', border: '#fed7aa' },
+        alliance_formed:  { label: 'alliance', color: '#1d4ed8', bg: '#dbeafe', border: '#bfdbfe' },
+        treaty_signed:    { label: 'treaty',   color: '#1e40af', bg: '#e0e7ff', border: '#c7d2fe' },
+        trade_agreement:  { label: 'trade',    color: '#047857', bg: '#d1fae5', border: '#a7f3d0' },
+      };
 
       const $ = (id) => document.getElementById(id);
       const statusEl = $('status');
@@ -53,11 +75,22 @@
       const stageEl = $('world_stage');
       const summaryEl = $('world_summary');
       const replaysEl = $('replays');
+      const buildInfoEl = $('build_info');
+      const metricsInfoEl = $('metrics_info');
 
       let es = null;
       let lastEvents = [];
 
       function setStatus(s) { statusEl.textContent = s; }
+
+      function escapeHTML(s) {
+        return String(s)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
 
       async function fetchHome(worldId) {
         const resp = await fetch(API_HOME + '?world_id=' + encodeURIComponent(worldId));
@@ -72,16 +105,33 @@
         for (const line of summary) {
           const li = document.createElement('li');
           li.textContent = line;
+          // Optional: emphasize key story events if they show up in summary strings.
+          for (const k of Object.keys(EVENT_STYLES)) {
+            if (String(line).includes(k)) {
+              li.classList.add('summary-highlight');
+              break;
+            }
+          }
           summaryEl.appendChild(li);
         }
       }
 
       function renderEvents() {
-        eventsEl.textContent = lastEvents.join('\n');
+        eventsEl.innerHTML = lastEvents.map((e) => e.html).join('\n');
       }
 
-      function addReplayLink(worldId, eventId, label) {
+      function addReplayLink(worldId, eventId, label, typ) {
         const li = document.createElement('li');
+        const st = typ ? EVENT_STYLES[String(typ)] : null;
+        if (st) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = '[' + st.label + ']';
+          badge.style.color = st.color;
+          badge.style.background = st.bg;
+          badge.style.borderColor = st.border;
+          li.appendChild(badge);
+        }
         const a = document.createElement('a');
         a.href = API_HIGHLIGHT + '?world_id=' + encodeURIComponent(worldId) + '&event_id=' + encodeURIComponent(eventId);
         a.target = '_blank';
@@ -106,6 +156,16 @@
         return resp.json();
       }
 
+      function formatEventHTML(obj, raw) {
+        const typ = (obj && obj.type) ? String(obj.type) : '';
+        const st = typ ? EVENT_STYLES[typ] : null;
+        const text = (obj && (obj.narrative || obj.title)) ? (obj.narrative || obj.title) : raw;
+        const body = escapeHTML(text);
+        if (!st) return body;
+        const badge = `<span class="badge" style="color:${st.color};background:${st.bg};border-color:${st.border};">[${escapeHTML(st.label)}]</span>`;
+        return badge + body;
+      }
+
       function connectSSE(worldId) {
         if (es) { es.close(); es = null; }
         const url = API_EVENTS_STREAM + '?world_id=' + encodeURIComponent(worldId);
@@ -115,20 +175,52 @@
         es.onerror = () => setStatus('SSE 连接中断（会自动重连）');
         es.onmessage = (ev) => {
           // best-effort: keep recent N lines, show raw data for debugging
-          lastEvents.push(ev.data);
+          let obj = null;
+          try { obj = JSON.parse(ev.data); } catch (_) {}
+          lastEvents.push({ raw: ev.data, html: formatEventHTML(obj, ev.data) });
           if (lastEvents.length > 200) lastEvents = lastEvents.slice(-200);
           renderEvents();
           // best-effort parse to expose replay entrypoint
-          try {
-            const obj = JSON.parse(ev.data);
-            if (obj && obj.event_id) {
-              const title = (obj.narrative || obj.type || 'event');
-              addReplayLink(worldId, obj.event_id, title);
-            }
-          } catch (_) {}
+          if (obj && obj.event_id) {
+            const title = (obj.narrative || obj.type || 'event');
+            addReplayLink(worldId, obj.event_id, title, obj.type);
+          }
           // refresh summary after events (best-effort)
           fetchHome(worldId).catch(() => {});
         };
+      }
+
+      async function fetchBuildInfo() {
+        try {
+          const resp = await fetch(API_DEBUG_BUILD);
+          if (!resp.ok) throw new Error('status ' + resp.status);
+          const data = await resp.json();
+          const b = (data && data.build) ? data.build : {};
+          const sha = b.git_sha || 'unknown';
+          const uptime = (b.uptime_sec != null) ? b.uptime_sec : '?';
+          const start = b.start_time || '';
+          buildInfoEl.textContent = `git_sha=${sha} uptime_sec=${uptime}` + (start ? ` start_time=${start}` : '');
+        } catch (e) {
+          buildInfoEl.textContent = `（不可用：${e.message}）`;
+        }
+      }
+
+      async function fetchMetricsInfo() {
+        try {
+          const resp = await fetch(API_DEBUG_METRICS);
+          if (!resp.ok) throw new Error('status ' + resp.status);
+          const data = await resp.json();
+          const m = (data && data.metrics) ? data.metrics : {};
+          const s = m.summary || {};
+          metricsInfoEl.textContent = `busy=${s.busy || 'unknown'} | queue=${s.queue || 'unknown'} | tick=${s.tick || 'unknown'}`;
+        } catch (e) {
+          metricsInfoEl.textContent = `（不可用：${e.message}）`;
+        }
+      }
+
+      function fetchDebug() {
+        // best-effort: don't block the rest of the UI
+        Promise.allSettled([fetchBuildInfo(), fetchMetricsInfo()]).catch(() => {});
       }
 
       $('btn_intent').onclick = async () => {
@@ -145,6 +237,22 @@
         }
       };
 
+      async function submitDemoGoal(goal) {
+        const worldId = $('world_id').value.trim();
+        if (!worldId) { setStatus('world_id 不能为空'); return; }
+        setStatus('提交中...');
+        try {
+          await postIntent(worldId, goal);
+          setStatus('已提交意图');
+          fetchHome(worldId).catch(() => {});
+        } catch (e) {
+          setStatus('提交失败：' + e.message);
+        }
+      }
+
+      $('btn_demo_betrayal').onclick = () => submitDemoGoal('背叛：翻脸');
+      $('btn_demo_war').onclick = () => submitDemoGoal('宣战：开战');
+
       $('btn_connect').onclick = () => {
         const worldId = $('world_id').value.trim();
         if (!worldId) { setStatus('world_id 不能为空'); return; }
@@ -159,6 +267,8 @@
         const url = API_EXPORT + '?world_id=' + encodeURIComponent(worldId);
         window.open(url, '_blank', 'noreferrer');
       };
+
+      $('btn_refresh_debug').onclick = () => fetchDebug();
 
       // Scriptable params for agentic testing:
       // /ui?world_id=w1&goal=...&autoconnect=1
@@ -187,7 +297,9 @@
           }
         } catch (_) {}
       })();
+
+      // Best-effort: show build/metrics summary on load (does not block UI).
+      fetchDebug();
     </script>
   </body>
 </html>
-
