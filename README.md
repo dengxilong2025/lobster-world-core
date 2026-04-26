@@ -47,3 +47,10 @@ go run ./cmd/server
 ```bash
 curl http://localhost:8080/healthz
 ```
+
+## Staging（Render）快速验收
+
+```bash
+# 默认验收 https://lobster-world-core.onrender.com
+bash scripts/smoke_staging.sh
+```
