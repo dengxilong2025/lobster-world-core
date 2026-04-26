@@ -26,8 +26,9 @@
 
 在 `buildInfoSnapshot()` 中：
 1. 若 `debug.ReadBuildInfo()` 有 `vcs.revision` → 取其前 7 位写入 `git_sha`
-2. 否则若 `buildGitSHA` 非空 → 写入 `git_sha=buildGitSHA`
-3. 否则 → 写入 `git_sha="unknown"`（保证字段不空）
+2. 否则若运行环境提供 `RENDER_GIT_COMMIT`（Render 默认环境变量）→ 取其前 7 位写入 `git_sha`
+3. 否则若 `buildGitSHA` 非空 → 写入 `git_sha=buildGitSHA`
+4. 否则 → 写入 `git_sha="unknown"`（保证字段不空）
 
 ### 2) 构建侧：Dockerfile 使用 ldflags 注入短 SHA
 
@@ -50,4 +51,3 @@
 本地：
 - `go test ./...` 通过
 - integration test 覆盖：当 `buildGitSHA` 被设置时，`git_sha` 不为空
-

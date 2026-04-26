@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"os"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -58,6 +59,27 @@ func buildInfoSnapshot() map[string]any {
 	}
 
 	// Strong guarantee: git_sha is always present and non-empty (best-effort real sha, fallback "unknown").
+	if gitSHA, _ := out["git_sha"].(string); gitSHA == "" {
+		if buildGitSHA != "" {
+			out["git_sha"] = buildGitSHA
+		} else {
+			out["git_sha"] = "unknown"
+		}
+	}
+
+	// Render provides commit SHA via env (available at runtime). Use as a fallback so staging can
+	// always expose the real deployed revision even when buildvcs isn't available and Docker build
+	// context lacks .git.
+	if gitSHA, _ := out["git_sha"].(string); gitSHA == "" {
+		if env := strings.TrimSpace(os.Getenv("RENDER_GIT_COMMIT")); env != "" {
+			if len(env) > 7 {
+				env = env[:7]
+			}
+			out["git_sha"] = env
+		}
+	}
+
+	// Strong guarantee: git_sha is always present and non-empty.
 	if gitSHA, _ := out["git_sha"].(string); gitSHA == "" {
 		if buildGitSHA != "" {
 			out["git_sha"] = buildGitSHA
