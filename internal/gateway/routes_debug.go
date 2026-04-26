@@ -57,10 +57,15 @@ func registerDebugRoutes(
 		if mt != nil {
 			snap = mt.Snapshot()
 		}
+		var qs map[string]sim.QueueStat
+		var ts map[string]sim.TickStat
 		if sm != nil {
-			snap["world_queue_stats"] = sm.QueueStats()
-			snap["world_tick_stats"] = sm.TickStats()
+			qs = sm.QueueStats()
+			ts = sm.TickStats()
+			snap["world_queue_stats"] = qs
+			snap["world_tick_stats"] = ts
 		}
+		snap["summary"] = buildMetricsSummary(mt, qs, ts)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
 			"metrics": snap,
