@@ -78,7 +78,7 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 		switch {
 		case st.State.Food <= 20:
 			primaryKind = "food"
-			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
+			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust；也可尝试“繁荣/互市/开放贸易”（market_boom），或在施压语境下尝试“封锁/关税/禁运/加税”（trade_dispute）观察走向"
 		case st.State.Conflict >= 60:
 			primaryKind = "conflict"
 			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
@@ -93,7 +93,7 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 		case "饥荒":
 			// If we are in famine stage but not below the hard risk threshold, still steer toward trade.
 			primaryKind = "food"
-			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust"
+			return "建议：优先补给——提交“贸易/集市/交换/商路”意图，观察是否触发 trade_agreement 并提升 food/trust；也可尝试“繁荣/互市/开放贸易”（market_boom），或在施压语境下尝试“封锁/关税/禁运/加税”（trade_dispute）观察走向"
 		case "战乱":
 			primaryKind = "conflict"
 			return "建议：优先降冲突——提交“停战/谈判/条约/结盟”意图，观察 treaty_signed / alliance_formed 是否出现并降低 conflict；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
@@ -121,6 +121,12 @@ func deriveWorldSummary(st sim.Status, recent []string) WorldSummary {
 		case "conflict":
 			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
 		}
+
+		// Conflict mid-range: allow a trade pressure branch even before full-scale war.
+		if st.State.Conflict >= 40 && st.State.Conflict < 60 {
+			return "建议：贸易施压——提交“封锁/关税/禁运/加税”意图，观察 trade_dispute 是否出现并推高 conflict"
+		}
+
 		// Prefer diplomacy in war / betrayal contexts to leverage story events.
 		if stage == "战乱" || strings.Contains(joined, "背叛") || strings.Contains(joined, "翻脸") {
 			return "建议：备选外交——提交“结盟/谈判/条约”意图，观察 alliance_formed / treaty_signed 是否出现并改变关系走向；也可尝试“背叛/翻脸/宣战/开战”意图（betrayal / war_started），观察关系裂变与冲突升级"
