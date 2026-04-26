@@ -10,6 +10,10 @@ import (
 // startTime is captured once per process, for /api/v0/debug/build uptime reporting.
 var startTime = time.Now()
 
+// buildGitSHA is injected at build time (Dockerfile ldflags). It should be a short SHA (7 chars).
+// If empty, buildInfoSnapshot falls back to buildvcs (vcs.revision) or "unknown".
+var buildGitSHA string
+
 func buildInfoSnapshot() map[string]any {
 	out := map[string]any{
 		"start_time": startTime.UTC().Format(time.RFC3339),
@@ -53,6 +57,14 @@ func buildInfoSnapshot() map[string]any {
 		}
 	}
 
+	// Strong guarantee: git_sha is always present and non-empty (best-effort real sha, fallback "unknown").
+	if gitSHA, _ := out["git_sha"].(string); gitSHA == "" {
+		if buildGitSHA != "" {
+			out["git_sha"] = buildGitSHA
+		} else {
+			out["git_sha"] = "unknown"
+		}
+	}
+
 	return out
 }
-
