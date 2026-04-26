@@ -28,6 +28,8 @@
       <button id="btn_intent">提交意图</button>
       <button id="btn_demo_betrayal" class="btn-sm">触发背叛</button>
       <button id="btn_demo_war" class="btn-sm">触发宣战</button>
+      <button id="btn_demo_boom" class="btn-sm">触发繁荣</button>
+      <button id="btn_demo_dispute" class="btn-sm">触发封锁</button>
       <button id="btn_connect">连接事件流</button>
       <button id="btn_export">导出回放（NDJSON）</button>
       <span id="status" class="muted"></span>
@@ -67,6 +69,8 @@
         alliance_formed:  { label: 'alliance', color: '#1d4ed8', bg: '#dbeafe', border: '#bfdbfe' },
         treaty_signed:    { label: 'treaty',   color: '#1e40af', bg: '#e0e7ff', border: '#c7d2fe' },
         trade_agreement:  { label: 'trade',    color: '#047857', bg: '#d1fae5', border: '#a7f3d0' },
+        market_boom:      { label: 'boom',     color: '#047857', bg: '#d1fae5', border: '#a7f3d0' },
+        trade_dispute:    { label: 'dispute',  color: '#6d28d9', bg: '#ede9fe', border: '#ddd6fe' },
       };
 
       const $ = (id) => document.getElementById(id);
@@ -252,6 +256,8 @@
 
       $('btn_demo_betrayal').onclick = () => submitDemoGoal('背叛：翻脸');
       $('btn_demo_war').onclick = () => submitDemoGoal('宣战：开战');
+      $('btn_demo_boom').onclick = () => submitDemoGoal('开放贸易：市场繁荣');
+      $('btn_demo_dispute').onclick = () => submitDemoGoal('封锁：加税关税');
 
       $('btn_connect').onclick = () => {
         const worldId = $('world_id').value.trim();
