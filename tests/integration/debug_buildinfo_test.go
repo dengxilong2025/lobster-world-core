@@ -49,11 +49,13 @@ func TestDebugBuild_ReturnsBuildInfo(t *testing.T) {
 		t.Fatalf("missing uptime_sec")
 	}
 
-	// Optional but useful (may be empty depending on build flags)
-	if v, ok := out.Build["git_sha"]; ok {
-		if s, ok := v.(string); ok && s == "" {
-			t.Fatalf("git_sha present but empty")
-		}
+	// Required: git_sha must always be non-empty (best-effort real sha, fallback "unknown").
+	v, ok := out.Build["git_sha"]
+	if !ok {
+		t.Fatalf("missing git_sha")
+	}
+	gitSHA, _ := v.(string)
+	if gitSHA == "" {
+		t.Fatalf("git_sha empty")
 	}
 }
-
