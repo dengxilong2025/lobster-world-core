@@ -44,7 +44,7 @@ func intentStorySpec(goal string) (storyEventSpec, bool) {
 		return storyEventSpec{}, false
 	}
 
-	// Precedence (v0.3-M4): betrayal/war_started > trade_dispute/market_boom > alliance/treaty (diplomacy+) > trade_agreement.
+	// Precedence (v0.3-M6): betrayal/war_started > battle_resolved > trade_dispute/market_boom > alliance/treaty (diplomacy+) > trade_agreement.
 	// This preserves the "at most 1 extra story event per intent" constraint.
 	if strings.Contains(g, "背叛") || strings.Contains(g, "翻脸") {
 		return storyEventSpec{
@@ -58,6 +58,13 @@ func intentStorySpec(goal string) (storyEventSpec, bool) {
 			typ:       "war_started",
 			narrative: "战端开启：宣战（目标：" + g + "）",
 			delta:     map[string]any{"conflict": int64(10), "order": int64(-3), "trust": int64(-4)},
+		}, true
+	}
+	if strings.Contains(g, "进攻") || strings.Contains(g, "突袭") || strings.Contains(g, "战斗") || strings.Contains(g, "会战") {
+		return storyEventSpec{
+			typ:       "battle_resolved",
+			narrative: "战斗结算：一场会战尘埃落定（目标：" + g + "）",
+			delta:     map[string]any{"conflict": int64(6), "order": int64(-2), "trust": int64(-2), "food": int64(-2)},
 		}, true
 	}
 
