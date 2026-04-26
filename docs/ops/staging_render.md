@@ -22,6 +22,9 @@ curl -sS -I "<STAGING_URL>/assets/production/manifest.json" | head -n 1
 当前 staging URL：
 - https://lobster-world-core.onrender.com
 
+说明：
+- 直接访问根路径 `/` 会 302 跳转到 `/ui`（更适合演示）
+
 ## 3) 注意事项
 
 - 免费层可能休眠/冷启动：第一次访问慢是正常现象。
