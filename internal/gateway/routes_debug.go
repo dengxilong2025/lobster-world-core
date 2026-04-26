@@ -58,4 +58,11 @@ func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs [
 			"metrics": snap,
 		})
 	})
+
+	mux.HandleFunc("GET /api/v0/debug/build", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":    true,
+			"build": buildInfoSnapshot(),
+		})
+	})
 }
