@@ -39,10 +39,24 @@ func TestUI_IncludesDemoFriendlyBlocks(t *testing.T) {
 	}
 
 	// Ensure key event types appear in highlight mapping.
-	for _, typ := range []string{"betrayal", "war_started"} {
+	for _, typ := range []string{
+		"betrayal",
+		"war_started",
+		"market_boom",
+		"trade_dispute",
+	} {
 		if !strings.Contains(html, typ) {
 			t.Fatalf("ui should reference event type %q for highlighting", typ)
 		}
 	}
-}
 
+	// Ensure trade demo buttons exist.
+	for _, id := range []string{
+		"btn_demo_boom",
+		"btn_demo_dispute",
+	} {
+		if !strings.Contains(html, id) {
+			t.Fatalf("ui should include demo button id %q", id)
+		}
+	}
+}
