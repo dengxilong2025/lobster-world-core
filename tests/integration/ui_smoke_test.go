@@ -11,6 +11,48 @@ import (
 	"lobster-world-core/internal/gateway"
 )
 
+func TestUI_RootRedirectsToUI(t *testing.T) {
+	t.Parallel()
+
+	app := gateway.NewAppWithOptions(gateway.AppOptions{TickInterval: 20 * time.Millisecond})
+	s := httptest.NewServer(app.Handler)
+	t.Cleanup(s.Close)
+	t.Cleanup(func() { app.Stop() })
+
+	// Do not follow redirects.
+	c := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	// 1) No query string.
+	resp, err := c.Get(s.URL + "/")
+	if err != nil {
+		t.Fatalf("get /: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected 302, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != "/ui" {
+		t.Fatalf("expected Location=/ui, got %q", got)
+	}
+
+	// 2) Preserve query string.
+	resp2, err := c.Get(s.URL + "/?world_id=w1&goal=hi")
+	if err != nil {
+		t.Fatalf("get / with query: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusFound {
+		t.Fatalf("expected 302, got %d", resp2.StatusCode)
+	}
+	if got := resp2.Header.Get("Location"); got != "/ui?world_id=w1&goal=hi" {
+		t.Fatalf("expected Location preserves query, got %q", got)
+	}
+}
+
 func TestUI_ServesHTML(t *testing.T) {
 	t.Parallel()
 
