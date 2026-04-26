@@ -12,7 +12,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o /out/server ./cmd/server
+RUN set -e; \
+  GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || true)"; \
+  if [ -z "$GIT_SHA" ]; then GIT_SHA="unknown"; fi; \
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -trimpath \
+    -ldflags "-s -w -X lobster-world-core/internal/gateway.buildGitSHA=$GIT_SHA" \
+    -o /out/server ./cmd/server
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
