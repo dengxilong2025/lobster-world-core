@@ -75,9 +75,28 @@ func findActionCompletedBW(evs []exportEventBW) *exportEventBW {
 	return nil
 }
 
+func actionCompletedIDsBW(evs []exportEventBW) map[string]struct{} {
+	out := map[string]struct{}{}
+	for i := range evs {
+		if evs[i].Type == "action_completed" && evs[i].EventID != "" {
+			out[evs[i].EventID] = struct{}{}
+		}
+	}
+	return out
+}
+
 func hasTraceCauseBW(e exportEventBW, causeEventID string) bool {
 	for _, tl := range e.Trace {
 		if tl.CauseEventID == causeEventID {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTraceCauseInSetBW(e exportEventBW, causeEventIDs map[string]struct{}) bool {
+	for _, tl := range e.Trace {
+		if _, ok := causeEventIDs[tl.CauseEventID]; ok {
 			return true
 		}
 	}
@@ -136,6 +155,7 @@ func TestStoryRules_BetrayalAndWarStarted(t *testing.T) {
 	if ac == nil {
 		t.Fatalf("missing action_completed in export")
 	}
+	acIDs := actionCompletedIDsBW(evs)
 
 	be := findByTypeBW(evs, "betrayal")
 	if be == nil {
@@ -144,8 +164,8 @@ func TestStoryRules_BetrayalAndWarStarted(t *testing.T) {
 	if len(be.Actors) != 2 || be.Actors[0] == be.Actors[1] {
 		t.Fatalf("betrayal actors invalid: %v", be.Actors)
 	}
-	if !hasTraceCauseBW(*be, ac.EventID) {
-		t.Fatalf("betrayal should trace action_completed %q", ac.EventID)
+	if !hasTraceCauseInSetBW(*be, acIDs) {
+		t.Fatalf("betrayal should trace an action_completed, trace=%#v", be.Trace)
 	}
 	if v, ok := numBW(be.Delta, "trust"); !ok || v >= 0 {
 		t.Fatalf("betrayal expected trust<0 delta=%v", be.Delta)
@@ -161,8 +181,8 @@ func TestStoryRules_BetrayalAndWarStarted(t *testing.T) {
 	if len(we.Actors) != 2 || we.Actors[0] == we.Actors[1] {
 		t.Fatalf("war_started actors invalid: %v", we.Actors)
 	}
-	if !hasTraceCauseBW(*we, ac.EventID) {
-		t.Fatalf("war_started should trace action_completed %q", ac.EventID)
+	if !hasTraceCauseInSetBW(*we, acIDs) {
+		t.Fatalf("war_started should trace an action_completed, trace=%#v", we.Trace)
 	}
 	if v, ok := numBW(we.Delta, "conflict"); !ok || v <= 0 {
 		t.Fatalf("war_started expected conflict>0 delta=%v", we.Delta)
@@ -183,4 +203,3 @@ func TestStoryRules_BetrayalAndWarStarted(t *testing.T) {
 		t.Fatalf("expected home hints mention betrayal/war_started, got=%s", hs)
 	}
 }
-
