@@ -44,7 +44,7 @@ func intentStorySpec(goal string) (storyEventSpec, bool) {
 		return storyEventSpec{}, false
 	}
 
-	// Precedence (v0.3-M2): betrayal/war_started > alliance/treaty (diplomacy+) > trade.
+	// Precedence (v0.3-M4): betrayal/war_started > trade_dispute/market_boom > alliance/treaty (diplomacy+) > trade_agreement.
 	// This preserves the "at most 1 extra story event per intent" constraint.
 	if strings.Contains(g, "背叛") || strings.Contains(g, "翻脸") {
 		return storyEventSpec{
@@ -61,7 +61,23 @@ func intentStorySpec(goal string) (storyEventSpec, bool) {
 		}, true
 	}
 
-	// Precedence (legacy): diplomacy > trade.
+	// Precedence (v0.3-M4): trade deepen branch (dispute/boom) beats diplomacy+ and base trade.
+	if strings.Contains(g, "封锁") || strings.Contains(g, "禁运") || strings.Contains(g, "加税") || strings.Contains(g, "关税") {
+		return storyEventSpec{
+			typ:       "trade_dispute",
+			narrative: "贸易纠纷：封锁与反制（目标：" + g + "）",
+			delta:     map[string]any{"food": int64(-3), "trust": int64(-6), "conflict": int64(4), "order": int64(-1)},
+		}, true
+	}
+	if strings.Contains(g, "繁荣") || strings.Contains(g, "互市") || strings.Contains(g, "市场") || strings.Contains(g, "开放贸易") {
+		return storyEventSpec{
+			typ:       "market_boom",
+			narrative: "贸易繁荣：市场兴旺（目标：" + g + "）",
+			delta:     map[string]any{"food": int64(8), "knowledge": int64(2), "trust": int64(2), "conflict": int64(-1)},
+		}, true
+	}
+
+	// Precedence: diplomacy+ beats base trade_agreement.
 	if strings.Contains(g, "结盟") || strings.Contains(g, "联盟") {
 		return storyEventSpec{
 			typ:       "alliance_formed",
