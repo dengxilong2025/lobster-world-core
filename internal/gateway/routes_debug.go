@@ -2,12 +2,20 @@ package gateway
 
 import (
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"lobster-world-core/internal/sim"
 )
 
-func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs []string, mt *Metrics) {
+func registerDebugRoutes(
+	mux *http.ServeMux,
+	sm *sim.Engine,
+	trustedProxyCIDRs []string,
+	mt *Metrics,
+	readBuildInfo func() (*debug.BuildInfo, bool),
+	gh GitHubCommitResolver,
+) {
 	mux.HandleFunc("GET /api/v0/debug/config", func(w http.ResponseWriter, r *http.Request) {
 		cfg := map[string]any{
 			"trusted_proxy_cidrs": trustedProxyCIDRs,
@@ -62,7 +70,7 @@ func registerDebugRoutes(mux *http.ServeMux, sm *sim.Engine, trustedProxyCIDRs [
 	mux.HandleFunc("GET /api/v0/debug/build", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":    true,
-			"build": buildInfoSnapshot(),
+			"build": buildInfoSnapshot(readBuildInfo, gh),
 		})
 	})
 }

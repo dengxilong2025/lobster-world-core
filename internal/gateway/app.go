@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -60,6 +61,15 @@ type AppOptions struct {
 	// TrustedProxyCIDRs configures reverse proxies that are allowed to set X-Forwarded-For.
 	// If empty, only loopback proxies are trusted (safe default).
 	TrustedProxyCIDRs []string
+
+	// ReadBuildInfo allows tests to simulate environments where runtime/debug.ReadBuildInfo returns
+	// no buildvcs info (e.g. Docker runtime without VCS metadata).
+	// If nil, runtime/debug.ReadBuildInfo is used.
+	ReadBuildInfo func() (*debug.BuildInfo, bool)
+
+	// GitHubCommitResolver allows tests to inject a resolver (e.g. httptest-backed base URL).
+	// If nil, NewHandler will create a default resolver.
+	GitHubCommitResolver GitHubCommitResolver
 }
 
 func NewAppWithOptions(opts AppOptions) *App {
@@ -108,6 +118,8 @@ func NewAppWithOptions(opts AppOptions) *App {
 		Spectator:  a.Spectator,
 		Sim:        a.Sim,
 		Metrics:    a.Metrics,
+		ReadBuildInfo:        opts.ReadBuildInfo,
+		GitHubCommitResolver: opts.GitHubCommitResolver,
 		TrustedProxyCIDRs: opts.TrustedProxyCIDRs,
 	})
 	return a

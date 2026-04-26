@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"lobster-world-core/internal/adoption"
@@ -20,6 +21,15 @@ type Options struct {
 	Spectator  *spectator.Projection
 	Sim        *sim.Engine
 	Metrics    *Metrics
+
+	// ReadBuildInfo is injectable for tests to simulate environments where buildvcs info is missing
+	// (e.g. Docker runtime without VCS metadata).
+	// If nil, defaults to runtime/debug.ReadBuildInfo.
+	ReadBuildInfo func() (*debug.BuildInfo, bool)
+
+	// GitHubCommitResolver is used as the final fallback for debug/build git_sha when it is unknown.
+	// If nil, a default resolver is created (2s timeout + 5m TTL cache).
+	GitHubCommitResolver GitHubCommitResolver
 
 	// TrustedProxyCIDRs configures reverse proxies that are allowed to set X-Forwarded-For.
 	// If empty, only loopback proxies are trusted (safe default).
@@ -61,6 +71,15 @@ func NewHandler(opts Options) http.Handler {
 		sm = sim.New(sim.Options{EventStore: es, Hub: hub})
 	}
 
+	readBuildInfo := opts.ReadBuildInfo
+	if readBuildInfo == nil {
+		readBuildInfo = debug.ReadBuildInfo
+	}
+	gh := opts.GitHubCommitResolver
+	if gh == nil {
+		gh = NewGitHubCommitResolver(GitHubCommitResolverOptions{})
+	}
+
 	mux := http.NewServeMux()
 
 	// v0 abuse protection: simple IP-based rate limit for auth endpoints.
@@ -77,7 +96,7 @@ func NewHandler(opts Options) http.Handler {
 	registerReplayRoutes(mux, es, sp, sm, mt)
 	registerAssetRoutes(mux)
 	registerUIRoutes(mux)
-	registerDebugRoutes(mux, sm, opts.TrustedProxyCIDRs, mt)
+	registerDebugRoutes(mux, sm, opts.TrustedProxyCIDRs, mt, readBuildInfo, gh)
 
 	// Wrap mux to capture status codes for metrics.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
