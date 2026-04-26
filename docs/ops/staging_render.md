@@ -19,8 +19,10 @@ curl -sS -I "<STAGING_URL>/ui" | head -n 1
 curl -sS -I "<STAGING_URL>/assets/production/manifest.json" | head -n 1
 ```
 
+当前 staging URL：
+- https://lobster-world-core.onrender.com
+
 ## 3) 注意事项
 
 - 免费层可能休眠/冷启动：第一次访问慢是正常现象。
 - 当前为内存态：重启/重新部署会清空 world 状态与事件。
-

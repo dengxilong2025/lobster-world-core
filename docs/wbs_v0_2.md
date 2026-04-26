@@ -14,8 +14,8 @@
 ## 0) 总览
 
 - 当前里程碑：**v0.2-M2：智能体体验测试通道（工程化）**
-- 当前总体完成度（估算）：**80%**
-- 当前状态（摘要）：M1/M2 已形成“可玩闭环 + 可批测 + 可留档对比”的最小交付；benchmarks v2 已升级到 v2.4（含 agent_batch 与 Verdict 回归来源清单）。剩余主要工作集中在：部署固定地址（DEP-02）与后续 v0.3/v0.4 内容线。
+- 当前总体完成度（估算）：**88%**
+- 当前状态（摘要）：M1/M2 已形成“可玩闭环 + 可批测 + 可留档对比”的最小交付；benchmarks v2 已升级到 v2.4（含 agent_batch 与 Verdict 回归来源清单）；已补齐 Render 免费 staging URL（可对外访问）。剩余主要工作集中在：后续 v0.3/v0.4 内容线与更系统的可观测性/运维增强。
 
 ---
 
@@ -50,7 +50,7 @@
 | ID | 任务 | 产出/验收标准 | 状态 | 备注 |
 |---|---|---|---|---|
 | DEP-01 | 一键启动 | docker compose 或单命令启动说明 | DONE | 已提供 Dockerfile + docker-compose.yml，并在 /ui 手册补充用法 |
-| DEP-02 | 固定可访问地址（可选） | staging URL 或可转发方式 | IN_PROGRESS | Render（Hobby/Free） |
+| DEP-02 | 固定可访问地址（可选） | staging URL 或可转发方式 | DONE | https://lobster-world-core.onrender.com（Render Free） |
 
 ---
 
