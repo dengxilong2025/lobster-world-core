@@ -42,6 +42,7 @@ func TestUI_IncludesDemoFriendlyBlocks(t *testing.T) {
 	for _, typ := range []string{
 		"betrayal",
 		"war_started",
+		"battle_resolved",
 		"market_boom",
 		"trade_dispute",
 	} {
@@ -54,6 +55,7 @@ func TestUI_IncludesDemoFriendlyBlocks(t *testing.T) {
 	for _, id := range []string{
 		"btn_demo_boom",
 		"btn_demo_dispute",
+		"btn_demo_battle",
 	} {
 		if !strings.Contains(html, id) {
 			t.Fatalf("ui should include demo button id %q", id)
