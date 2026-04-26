@@ -44,7 +44,24 @@ func intentStorySpec(goal string) (storyEventSpec, bool) {
 		return storyEventSpec{}, false
 	}
 
-	// Precedence: diplomacy > trade (avoid emitting multiple extra events per intent in v0.3-M1).
+	// Precedence (v0.3-M2): betrayal/war_started > alliance/treaty (diplomacy+) > trade.
+	// This preserves the "at most 1 extra story event per intent" constraint.
+	if strings.Contains(g, "背叛") || strings.Contains(g, "翻脸") {
+		return storyEventSpec{
+			typ:       "betrayal",
+			narrative: "关系裂变：背叛发生（目标：" + g + "）",
+			delta:     map[string]any{"trust": int64(-10), "conflict": int64(8), "order": int64(-2)},
+		}, true
+	}
+	if strings.Contains(g, "宣战") || strings.Contains(g, "开战") {
+		return storyEventSpec{
+			typ:       "war_started",
+			narrative: "战端开启：宣战（目标：" + g + "）",
+			delta:     map[string]any{"conflict": int64(10), "order": int64(-3), "trust": int64(-4)},
+		}, true
+	}
+
+	// Precedence (legacy): diplomacy > trade.
 	if strings.Contains(g, "结盟") || strings.Contains(g, "联盟") {
 		return storyEventSpec{
 			typ:       "alliance_formed",
@@ -101,4 +118,3 @@ func buildStoryWorldEvent(worldID string, tick int64, worldSeed int64, intentID 
 	}
 	return ev, true
 }
-
