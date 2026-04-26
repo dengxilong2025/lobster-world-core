@@ -13,8 +13,10 @@ RUN go mod download
 
 COPY . .
 RUN set -e; \
-  GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || true)"; \
+  GIT_SHA="${RENDER_GIT_COMMIT:-}"; \
+  if [ -z "$GIT_SHA" ]; then GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || true)"; fi; \
   if [ -z "$GIT_SHA" ]; then GIT_SHA="unknown"; fi; \
+  GIT_SHA="$(printf %s "$GIT_SHA" | cut -c1-7)"; \
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -trimpath \
     -ldflags "-s -w -X lobster-world-core/internal/gateway.buildGitSHA=$GIT_SHA" \

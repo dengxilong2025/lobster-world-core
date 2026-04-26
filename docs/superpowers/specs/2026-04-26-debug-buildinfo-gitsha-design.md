@@ -33,7 +33,8 @@
 ### 2) 构建侧：Dockerfile 使用 ldflags 注入短 SHA
 
 修改 `Dockerfile` builder 阶段的 go build 行：
-- 在构建容器内尝试运行 `git rev-parse --short HEAD`
+- 优先使用 Render 默认环境变量 `RENDER_GIT_COMMIT`（build time 可用）
+- 若为空，则在构建容器内尝试运行 `git rev-parse --short HEAD`
 - 若仓库没有 `.git`（或 git 不可用），则降级为 `unknown`
 - 通过 `-ldflags "-X lobster-world-core/internal/gateway.buildGitSHA=${GIT_SHA} -s -w"` 注入
 
